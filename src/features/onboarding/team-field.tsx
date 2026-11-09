@@ -10,19 +10,21 @@ type TeamFieldProps = {
   league: League;
   label: string;
   value: number | null;
+  required?: boolean;
   expanded: boolean;
   onToggle: () => void;
   onSelect: (teamId: number | null) => void;
 };
 
-export function TeamField({ league, label, value, expanded, onToggle, onSelect }: TeamFieldProps) {
+export function TeamField({ league, label, value, required = false, expanded, onToggle, onSelect }: TeamFieldProps) {
   const theme = useTheme();
   const teams = onboardingTeams[league];
-  const selectedName = teams.find((team) => team.id === value)?.name ?? '선택 안 함';
+  const selectedName = teams.find((team) => team.id === value)?.name ?? (required ? '팀을 선택해 주세요' : '선택 안 함');
+  const options = required ? teams : [{ id: null, name: '선택 안 함' }, ...teams];
 
   return (
     <View style={styles.field}>
-      <ThemedText type="smallBold">{label} (선택)</ThemedText>
+      <ThemedText type="smallBold">{label} ({required ? '필수' : '선택'})</ThemedText>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${label} 선택`}
@@ -35,7 +37,7 @@ export function TeamField({ league, label, value, expanded, onToggle, onSelect }
       </Pressable>
       {expanded && (
         <View style={styles.options}>
-          {[{ id: null, name: '선택 안 함' }, ...teams].map(({ id, name }) => (
+          {options.map(({ id, name }) => (
             <Pressable
               key={id ?? 'none'}
               accessibilityRole="radio"

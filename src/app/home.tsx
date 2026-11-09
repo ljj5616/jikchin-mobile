@@ -1,28 +1,39 @@
 import { Image } from 'expo-image';
+import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
-import { getMockRooms } from '@/features/rooms/mock-rooms';
-import { formatGameDate, listRecruitingRooms, type RoomResponse } from '@/features/rooms/room-list';
+import { joinMockRoom, listMockRooms, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { formatGameDate, type RoomResponse } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
 
-function RoomCard({ room }: { room: RoomResponse }) {
+type RoomSection = { key: string; title: string; joined: boolean; data: RoomResponse[] };
+
+function RoomCard({ room, joined, onPress }: { room: RoomResponse; joined: boolean; onPress: () => void }) {
   const theme = useTheme();
 
   return (
-    <View
-      style={[styles.card, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint="채팅방 열기"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: theme.background, borderColor: theme.backgroundSelected },
+        pressed && styles.pressed,
+      ]}>
       <View style={styles.cardRow}>
         <ThemedText type="smallBold" themeColor="textSecondary">
           {formatGameDate(room.gameDate)}
         </ThemedText>
         <View style={styles.vacancyBadge}>
           <ThemedText type="smallBold" style={styles.vacancyText}>
-            {room.capacity - room.participantCount}자리 남음
+            {joined ? '참여 중' : `${room.capacity - room.participantCount}자리 남음`}
           </ThemedText>
         </View>
       </View>
@@ -36,25 +47,76 @@ function RoomCard({ room }: { room: RoomResponse }) {
         <ThemedText type="small" themeColor="textSecondary">{room.stadium}</ThemedText>
         <ThemedText type="smallBold">{room.participantCount}/{room.capacity}명 참여</ThemedText>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 export default function HomeScreen() {
   const theme = useTheme();
   const { session, signOut } = useMockSession();
+  const userId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
+  const [feed, setFeed] = useState<Awaited<ReturnType<typeof listMockRooms>> | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const openingRoom = useRef(false);
+
+  useFocusEffect(useCallback(() => {
+    if (userId === null) return;
+    let active = true;
+
+    listMockRooms(userId).then((rooms) => {
+      if (!active) return;
+      setFeed(rooms);
+      setLoadError(null);
+    }).catch(() => {
+      if (active) setLoadError('방 목록을 불러오지 못했어요.');
+    });
+
+    return () => { active = false; };
+  }, [userId]));
+
+  async function openRoom(roomId: number) {
+    if (userId === null || openingRoom.current) return;
+    openingRoom.current = true;
+    setOpenError(null);
+
+    try {
+      await joinMockRoom(roomId, userId);
+      router.push({ pathname: '/room-chat/[roomId]', params: { roomId } });
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : '채팅방을 열지 못했어요.');
+    } finally {
+      openingRoom.current = false;
+    }
+  }
+
   if (!session || session.needProfile) return null;
 
-  const today = new Date();
-  const rooms = listRecruitingRooms(getMockRooms(today), today);
+  const sections = feed ? [
+    ...(feed.joined.length ? [{ key: 'joined', title: '참여한 방', joined: true, data: feed.joined }] : []),
+    { key: 'recruiting', title: '모집 중인 방', joined: false, data: feed.recruiting },
+  ] : [];
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.backgroundElement }]}>
       <StatusBar style="auto" />
-      <FlatList
-        data={rooms}
+      <SectionList<RoomResponse, RoomSection>
+        sections={sections}
         keyExtractor={(room) => String(room.id)}
-        renderItem={({ item }) => <RoomCard room={item} />}
+        renderItem={({ item, section }) => (
+          <RoomCard room={item} joined={section.joined} onPress={() => openRoom(item.id)} />
+        )}
+        renderSectionHeader={({ section }) => (
+          <ThemedText accessibilityRole="header" type="smallBold" style={styles.sectionHeading}>
+            {section.title} {section.data.length}개
+          </ThemedText>
+        )}
+        renderSectionFooter={({ section }) => !section.data.length ? (
+          <View style={[styles.card, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
+            <ThemedText themeColor="textSecondary">지금 모집 중인 방이 없어요.</ThemedText>
+          </View>
+        ) : null}
+        stickySectionHeadersEnabled={false}
         style={styles.list}
         contentContainerStyle={styles.content}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -73,6 +135,12 @@ export default function HomeScreen() {
                 )}
                 <Pressable
                   accessibilityRole="button"
+                  onPress={() => router.push('/create-room')}
+                  style={({ pressed }) => [styles.button, styles.createButton, pressed && styles.pressed]}>
+                  <ThemedText type="smallBold" style={styles.createLabel}>방 생성</ThemedText>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
                   onPress={signOut}
                   style={[styles.button, { backgroundColor: theme.background }]}>
                   <ThemedText type="smallBold">로그아웃</ThemedText>
@@ -87,20 +155,15 @@ export default function HomeScreen() {
               <ThemedText themeColor="textSecondary">같이 볼 경기를 찾아보세요.</ThemedText>
             </View>
 
-            <View style={styles.cardRow}>
-              <ThemedText accessibilityRole="header" type="smallBold">
-                모집 중인 방 {rooms.length}개
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">예시 데이터</ThemedText>
-            </View>
+            <ThemedText type="small" themeColor="textSecondary">개발용 방 목록</ThemedText>
+            {(openError ?? loadError) && (
+              <ThemedText accessibilityRole="alert" type="small">{openError ?? loadError}</ThemedText>
+            )}
           </View>
         }
-        ListEmptyComponent={
-          <View
-            style={[styles.card, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
-            <ThemedText themeColor="textSecondary">지금 모집 중인 방이 없어요.</ThemedText>
-          </View>
-        }
+        ListEmptyComponent={loadError ? undefined : (
+          <ThemedText themeColor="textSecondary">방 목록을 불러오는 중이에요.</ThemedText>
+        )}
       />
     </SafeAreaView>
   );
@@ -130,8 +193,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: 12,
   },
+  createButton: { backgroundColor: '#2554DB' },
+  createLabel: { color: '#FFFFFF' },
+  pressed: { opacity: 0.8 },
   intro: { gap: Spacing.one },
   title: { fontWeight: '700' },
+  sectionHeading: { marginTop: Spacing.three, marginBottom: Spacing.two },
   separator: { height: Spacing.two + Spacing.one },
   card: {
     gap: Spacing.three,

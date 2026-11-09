@@ -1,34 +1,56 @@
 import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useMockSession, type SocialProvider } from '@/features/auth/mock-session';
 import { useTheme } from '@/hooks/use-theme';
 
 const loginOptions = [
   {
+    provider: 'google',
     label: 'Google로 계속하기',
     backgroundColor: '#FFFFFF',
     borderColor: '#747775',
     textColor: '#1F1F1F',
   },
   {
+    provider: 'kakao',
     label: '카카오 로그인',
     backgroundColor: '#FEE500',
     borderColor: '#FEE500',
     textColor: '#191919',
   },
   {
+    provider: 'naver',
     label: '네이버 로그인',
     backgroundColor: '#03A94D',
     borderColor: '#03A94D',
     textColor: '#FFFFFF',
   },
-];
+] as const;
 
 export default function LoginScreen() {
   const { background } = useTheme();
+  const { signIn } = useMockSession();
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function startSignIn(provider: SocialProvider) {
+    if (isSigningIn) return;
+
+    setIsSigningIn(true);
+    setError(null);
+    try {
+      await signIn(provider);
+    } catch {
+      setError('임시 계정을 불러오지 못했어요. 다시 시도해 주세요.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: background }]}>
@@ -54,18 +76,27 @@ export default function LoginScreen() {
             소셜 계정으로 시작하기
           </ThemedText>
           <View style={styles.buttons}>
-            {loginOptions.map(({ label, backgroundColor, borderColor, textColor }) => (
+            {loginOptions.map(({ provider, label, backgroundColor, borderColor, textColor }) => (
               <Pressable
-                key={label}
+                key={provider}
                 accessibilityRole="button"
-                disabled
-                style={[styles.button, { backgroundColor, borderColor }]}>
+                disabled={!__DEV__ || isSigningIn}
+                onPress={() => startSignIn(provider)}
+                style={({ pressed }) => [
+                  styles.button,
+                  { backgroundColor, borderColor },
+                  pressed && styles.pressed,
+                ]}>
                 <ThemedText style={[styles.buttonLabel, { color: textColor }]}>{label}</ThemedText>
               </Pressable>
             ))}
           </View>
-          <ThemedText themeColor="textSecondary" type="small" style={styles.centeredText}>
-            소셜 로그인 연동을 준비하고 있어요.
+          <ThemedText
+            accessibilityLiveRegion="polite"
+            themeColor="textSecondary"
+            type="small"
+            style={styles.centeredText}>
+            {error ?? (__DEV__ ? '개발용 임시 로그인' : '소셜 로그인 연동을 준비하고 있어요.')}
           </ThemedText>
         </View>
       </ScrollView>
@@ -148,4 +179,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  pressed: { opacity: 0.8 },
 });

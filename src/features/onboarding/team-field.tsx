@@ -1,0 +1,78 @@
+import { Pressable, StyleSheet, View } from 'react-native';
+
+import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+import { onboardingTeams, type League } from './profile';
+
+type TeamFieldProps = {
+  league: League;
+  label: string;
+  value: number | null;
+  expanded: boolean;
+  onToggle: () => void;
+  onSelect: (teamId: number | null) => void;
+};
+
+export function TeamField({ league, label, value, expanded, onToggle, onSelect }: TeamFieldProps) {
+  const theme = useTheme();
+  const teams = onboardingTeams[league];
+  const selectedName = teams.find((team) => team.id === value)?.name ?? '선택 안 함';
+
+  return (
+    <View style={styles.field}>
+      <ThemedText type="smallBold">{label} (선택)</ThemedText>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label} 선택`}
+        accessibilityValue={{ text: selectedName }}
+        accessibilityState={{ expanded }}
+        onPress={onToggle}
+        style={[styles.selector, { borderColor: theme.backgroundSelected }]}>
+        <ThemedText style={styles.selection}>{selectedName}</ThemedText>
+        <ThemedText type="smallBold" themeColor="textSecondary">{expanded ? '닫기' : '선택'}</ThemedText>
+      </Pressable>
+      {expanded && (
+        <View style={styles.options}>
+          {[{ id: null, name: '선택 안 함' }, ...teams].map(({ id, name }) => (
+            <Pressable
+              key={id ?? 'none'}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: id === value }}
+              onPress={() => onSelect(id)}
+              style={[
+                styles.option,
+                { backgroundColor: id === value ? theme.backgroundSelected : theme.backgroundElement },
+              ]}>
+              <ThemedText type={id === value ? 'smallBold' : 'small'}>{name}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  field: { gap: Spacing.two },
+  selector: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  selection: { flex: 1 },
+  options: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  option: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 12,
+  },
+});

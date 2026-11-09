@@ -1,0 +1,81 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, useContext, useState, type PropsWithChildren } from 'react';
+
+import type { CompleteProfileRequest } from '@/features/onboarding/profile';
+
+export type SocialProvider = 'google' | 'kakao' | 'naver';
+
+type Session =
+  | { provider: SocialProvider; needProfile: true }
+  | {
+      provider: SocialProvider;
+      needProfile: false;
+      profile: CompleteProfileRequest;
+      avatarUri: string | null;
+    };
+
+type MockProfiles = Partial<Record<SocialProvider, CompleteProfileRequest>>;
+
+type MockSessionContextValue = {
+  session: Session | null;
+  signIn: (provider: SocialProvider) => Promise<void>;
+  checkNickname: (nickname: string) => Promise<{ available: boolean }>;
+  completeProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
+  signOut: () => void;
+};
+
+const profilesKey = 'jikchin.mock-profiles.v1';
+const MockSessionContext = createContext<MockSessionContextValue | null>(null);
+
+async function readProfiles(): Promise<MockProfiles> {
+  const stored = await AsyncStorage.getItem(profilesKey);
+  return stored ? (JSON.parse(stored) as MockProfiles) : {};
+}
+
+function nicknameIsAvailable(profiles: MockProfiles, nickname: string) {
+  return !Object.values(profiles).some(
+    (profile) => profile.nickname.localeCompare(nickname, 'ko', { sensitivity: 'base' }) === 0,
+  );
+}
+
+export function MockSessionProvider({ children }: PropsWithChildren) {
+  const [session, setSession] = useState<Session | null>(null);
+
+  async function signIn(provider: SocialProvider) {
+    if (!__DEV__) return;
+
+    const profile = (await readProfiles())[provider];
+    const nextSession: Session = profile
+      ? { provider, needProfile: false, profile, avatarUri: null }
+      : { provider, needProfile: true };
+    setSession((current) => current ?? nextSession);
+  }
+
+  async function checkNickname(nickname: string) {
+    return { available: nicknameIsAvailable(await readProfiles(), nickname) };
+  }
+
+  async function completeProfile(profile: CompleteProfileRequest, avatarUri: string | null) {
+    if (!session?.needProfile) throw new Error('An onboarding session is required');
+
+    const profiles = await readProfiles();
+    if (!nicknameIsAvailable(profiles, profile.nickname)) return false;
+
+    await AsyncStorage.setItem(profilesKey, JSON.stringify({ ...profiles, [session.provider]: profile }));
+    setSession({ provider: session.provider, needProfile: false, profile, avatarUri });
+    return true;
+  }
+
+  return (
+    <MockSessionContext.Provider
+      value={{ session, signIn, checkNickname, completeProfile, signOut: () => setSession(null) }}>
+      {children}
+    </MockSessionContext.Provider>
+  );
+}
+
+export function useMockSession() {
+  const context = useContext(MockSessionContext);
+  if (!context) throw new Error('MockSessionProvider is required');
+  return context;
+}

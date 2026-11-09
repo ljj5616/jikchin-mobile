@@ -1,98 +1,151 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+const loginOptions = [
+  {
+    label: 'Google로 계속하기',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#747775',
+    textColor: '#1F1F1F',
+  },
+  {
+    label: '카카오 로그인',
+    backgroundColor: '#FEE500',
+    borderColor: '#FEE500',
+    textColor: '#191919',
+  },
+  {
+    label: '네이버 로그인',
+    backgroundColor: '#03A94D',
+    borderColor: '#03A94D',
+    textColor: '#FFFFFF',
+  },
+];
 
-export default function HomeScreen() {
+export default function LoginScreen() {
+  const { background } = useTheme();
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+    <SafeAreaView style={[styles.screen, { backgroundColor: background }]}>
+      <StatusBar style="auto" />
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.intro}>
+          <View style={styles.mark}>
+            <View style={styles.pitch}>
+              <View style={styles.halfwayLine} />
+              <View style={styles.centerCircle} />
+            </View>
+          </View>
+          <ThemedText accessibilityRole="header" type="title" style={styles.centeredText}>
+            직관친구
           </ThemedText>
-        </ThemedView>
+          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+            경기장에서 함께 응원할 친구를 만나요.
+          </ThemedText>
+        </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        <View style={styles.signIn}>
+          <ThemedText accessibilityRole="header" type="smallBold" style={styles.centeredText}>
+            소셜 계정으로 시작하기
+          </ThemedText>
+          <View style={styles.buttons}>
+            {loginOptions.map(({ label, backgroundColor, borderColor, textColor }) => (
+              <Pressable
+                key={label}
+                accessibilityRole="button"
+                disabled
+                style={[styles.button, { backgroundColor, borderColor }]}>
+                <ThemedText style={[styles.buttonLabel, { color: textColor }]}>{label}</ThemedText>
+              </Pressable>
+            ))}
+          </View>
+          <ThemedText themeColor="textSecondary" type="small" style={styles.centeredText}>
+            소셜 로그인 연동을 준비하고 있어요.
+          </ThemedText>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
-  safeArea: {
-    flex: 1,
+  content: {
+    flexGrow: 1,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 480,
+    gap: Spacing.five,
     paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.five,
+  },
+  intro: {
+    flexGrow: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    paddingVertical: Spacing.four,
   },
-  heroSection: {
+  mark: {
+    width: 76,
+    height: 76,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    borderRadius: 24,
+    backgroundColor: '#2554DB',
   },
-  title: {
+  pitch: {
+    width: 42,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderRadius: 5,
+    borderColor: '#FFFFFF',
+  },
+  halfwayLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1.5,
+    backgroundColor: '#FFFFFF',
+  },
+  centerCircle: {
+    width: 12,
+    height: 12,
+    borderWidth: 1.5,
+    borderRadius: 6,
+    borderColor: '#FFFFFF',
+  },
+  centeredText: {
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
+  signIn: {
     gap: Spacing.three,
-    alignSelf: 'stretch',
+  },
+  buttons: {
+    gap: Spacing.two,
+  },
+  button: {
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    paddingVertical: Spacing.two,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  buttonLabel: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

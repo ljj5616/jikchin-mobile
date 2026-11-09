@@ -31,10 +31,14 @@ export function formatGameDate(gameDate: string) {
   return gameDateFormatter.format(new Date(`${gameDate}T00:00:00Z`));
 }
 
+export function compareRoomSchedule(first: RoomResponse, second: RoomResponse) {
+  return first.gameDate.localeCompare(second.gameDate) || first.id - second.id;
+}
+
 export function listRecruitingRooms(rooms: RoomResponse[], today: Date) {
   const firstDate = gameDateKey(today);
 
   return rooms
     .filter((room) => room.gameDate >= firstDate && room.participantCount < room.capacity)
-    .sort((first, second) => first.gameDate.localeCompare(second.gameDate) || first.id - second.id);
+    .sort(compareRoomSchedule);
 }

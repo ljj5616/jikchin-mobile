@@ -34,6 +34,16 @@ async function readProfiles(): Promise<MockProfiles> {
   return stored ? (JSON.parse(stored) as MockProfiles) : {};
 }
 
+export async function getMockProfileSummaries(): Promise<Partial<Record<SocialProvider, { nickname: string; avatarUrl: string | null }>>> {
+  const profiles = await readProfiles();
+  const summaries: Partial<Record<SocialProvider, { nickname: string; avatarUrl: string | null }>> = {};
+  for (const provider of ['google', 'kakao', 'naver'] as const) {
+    const profile = profiles[provider];
+    if (profile) summaries[provider] = { nickname: profile.nickname, avatarUrl: profile.localAvatarUri ?? null };
+  }
+  return summaries;
+}
+
 function nicknameIsAvailable(profiles: MockProfiles, nickname: string) {
   return !Object.values(profiles).some(
     (profile) => profile.nickname.localeCompare(nickname, 'ko', { sensitivity: 'base' }) === 0,

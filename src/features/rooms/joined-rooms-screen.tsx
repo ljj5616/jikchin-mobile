@@ -43,7 +43,7 @@ export function JoinedRoomsScreen({ active, onBrowseRooms }: { active: boolean; 
         data={rooms ?? []}
         keyExtractor={(room) => String(room.id)}
         renderItem={({ item }) => (
-          <RoomCard room={item} joined onPress={() => router.push({ pathname: '/room-chat/[roomId]', params: { roomId: item.id } })} />
+          <RoomCard room={item} joined accessibilityHint="채팅방 열기" onPress={() => router.push({ pathname: '/room-chat/[roomId]', params: { roomId: item.id } })} />
         )}
         style={styles.list}
         contentContainerStyle={styles.content}

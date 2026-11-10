@@ -1,24 +1,24 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
-import { joinMockRoom, listMockRooms, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { listMockRooms, mockRoomUserIds } from '@/features/rooms/mock-room-store';
 import { formatGameDate, type RoomResponse } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
 
 type RoomSection = { key: string; title: string; joined: boolean; data: RoomResponse[] };
 
-export function RoomCard({ room, joined, onPress }: { room: RoomResponse; joined: boolean; onPress: () => void }) {
+export function RoomCard({ room, joined, onPress, accessibilityHint = '방 상세 보기' }: { room: RoomResponse; joined: boolean; onPress: () => void; accessibilityHint?: string }) {
   const theme = useTheme();
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityHint="채팅방 열기"
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
@@ -55,8 +55,6 @@ export function RoomListScreen() {
   const userId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
   const [feed, setFeed] = useState<Awaited<ReturnType<typeof listMockRooms>> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [openError, setOpenError] = useState<string | null>(null);
-  const openingRoom = useRef(false);
 
   useFocusEffect(useCallback(() => {
     if (userId === null) return;
@@ -73,25 +71,9 @@ export function RoomListScreen() {
     return () => { active = false; };
   }, [userId]));
 
-  async function openRoom(roomId: number) {
-    if (userId === null || openingRoom.current) return;
-    openingRoom.current = true;
-    setOpenError(null);
-
-    try {
-      await joinMockRoom(roomId, userId);
-      router.push({ pathname: '/room-chat/[roomId]', params: { roomId } });
-    } catch (error) {
-      setOpenError(error instanceof Error ? error.message : '채팅방을 열지 못했어요.');
-    } finally {
-      openingRoom.current = false;
-    }
-  }
-
   if (!session || session.needProfile) return null;
 
   const sections = feed ? [
-    ...(feed.joined.length ? [{ key: 'joined', title: '참여한 방', joined: true, data: feed.joined }] : []),
     { key: 'recruiting', title: '모집 중인 방', joined: false, data: feed.recruiting },
   ] : [];
 
@@ -101,7 +83,7 @@ export function RoomListScreen() {
         sections={sections}
         keyExtractor={(room) => String(room.id)}
         renderItem={({ item, section }) => (
-          <RoomCard room={item} joined={section.joined} onPress={() => openRoom(item.id)} />
+          <RoomCard room={item} joined={section.joined} onPress={() => router.push({ pathname: '/room-detail/[roomId]', params: { roomId: item.id } })} />
         )}
         renderSectionHeader={({ section }) => (
           <ThemedText accessibilityRole="header" type="smallBold" style={styles.sectionHeading}>
@@ -147,12 +129,12 @@ export function RoomListScreen() {
             </View>
 
             <ThemedText type="small" themeColor="textSecondary">개발용 방 목록</ThemedText>
-            {(openError ?? loadError) && (
-              <ThemedText accessibilityRole="alert" type="small">{openError ?? loadError}</ThemedText>
+            {loadError && (
+              <ThemedText accessibilityRole="alert" type="small">{loadError}</ThemedText>
             )}
           </View>
         }
-        ListEmptyComponent={loadError ? undefined : (
+        ListEmptyComponent={loadError || feed ? undefined : (
           <ThemedText themeColor="textSecondary">방 목록을 불러오는 중이에요.</ThemedText>
         )}
       />

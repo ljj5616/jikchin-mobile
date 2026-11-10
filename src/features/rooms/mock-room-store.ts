@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { SocialProvider } from '@/features/auth/mock-session';
+import { getMockProfileSummaries, type SocialProvider } from '@/features/auth/mock-session';
 
 import { validateRoomRequest, type CreateRoomRequest } from './create-room';
 import { getMockRooms } from './mock-rooms';
@@ -28,7 +28,15 @@ export type ChatMessageResponse = {
 };
 
 type StoredRoom = Omit<RoomResponse, 'participantCount'>;
-type RoomMember = { userId: number; afterMessageId: number };
+type RoomMember = { userId: number; afterMessageId: number; joinedAt?: string };
+
+export type RoomParticipant = {
+  userId: number;
+  nickname: string | null;
+  avatarUrl: string | null;
+  host: boolean;
+  joinedAt: string | null;
+};
 
 type RoomState = {
   createdRooms: StoredRoom[];
@@ -120,6 +128,32 @@ export async function listMockRooms(userId: number) {
   };
 }
 
+export async function loadMockRoomDetail(roomId: number, userId: number) {
+  const [state, profiles] = await Promise.all([readState(), getMockProfileSummaries()]);
+  const today = new Date();
+  const room = findRoom(state, roomId, today);
+  const fixture = getMockRooms(today).find((sample) => sample.id === roomId);
+  const sampleParticipants: RoomParticipant[] = fixture ? Array.from({ length: fixture.participantCount }, (_, index) => ({
+    userId: index === 0 ? fixture.hostId : 10000 + fixture.id * 100 + index,
+    nickname: `직관친구 ${index + 1}`,
+    avatarUrl: null,
+    host: index === 0,
+    joinedAt: null,
+  })) : [];
+  const storedParticipants: RoomParticipant[] = (state.members[roomId] ?? []).map((member) => {
+    const provider = (Object.keys(mockRoomUserIds) as SocialProvider[]).find((key) => mockRoomUserIds[key] === member.userId);
+    const profile = provider ? profiles[provider] : undefined;
+    return {
+      userId: member.userId,
+      nickname: profile?.nickname ?? null,
+      avatarUrl: profile?.avatarUrl ?? null,
+      host: member.userId === room.hostId,
+      joinedAt: member.joinedAt ?? null,
+    };
+  });
+  return { room, participants: [...sampleParticipants, ...storedParticipants], joined: memberChatStart(state, roomId, userId) !== undefined };
+}
+
 export function createMockRoom(userId: number, request: CreateRoomRequest) {
   return writeState((state) => {
     const today = new Date();
@@ -129,7 +163,7 @@ export function createMockRoom(userId: number, request: CreateRoomRequest) {
     const chatThreadId = rooms.reduce((max, room) => Math.max(max, room.chatThreadId), state.lastChatThreadId) + 1;
     const room = { ...details, id, chatThreadId, hostId: userId };
     state.createdRooms.push(room);
-    state.members[id] = [{ userId, afterMessageId: 0 }];
+    state.members[id] = [{ userId, afterMessageId: 0, joinedAt: new Date().toISOString() }];
     state.lastRoomId = id;
     state.lastChatThreadId = chatThreadId;
     return { ...room, participantCount: 1 };
@@ -145,7 +179,7 @@ export function joinMockRoom(roomId: number, userId: number) {
     if (room.participantCount >= room.capacity) throw new Error('방 정원이 가득 찼어요.');
 
     const afterMessageId = state.messages[roomId]?.at(-1)?.id ?? 0;
-    state.members[roomId] = [...(state.members[roomId] ?? []), { userId, afterMessageId }];
+    state.members[roomId] = [...(state.members[roomId] ?? []), { userId, afterMessageId, joinedAt: new Date().toISOString() }];
   });
 }
 

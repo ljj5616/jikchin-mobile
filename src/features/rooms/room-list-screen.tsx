@@ -12,7 +12,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 type RoomSection = { key: string; title: string; joined: boolean; data: RoomResponse[] };
 
-function RoomCard({ room, joined, onPress }: { room: RoomResponse; joined: boolean; onPress: () => void }) {
+export function RoomCard({ room, joined, onPress }: { room: RoomResponse; joined: boolean; onPress: () => void }) {
   const theme = useTheme();
 
   return (

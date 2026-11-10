@@ -6,10 +6,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useMockSession } from '@/features/auth/mock-session';
 import { MyPage } from '@/features/profile/my-page';
+import { JoinedRoomsScreen } from '@/features/rooms/joined-rooms-screen';
 import { RoomListScreen } from '@/features/rooms/room-list-screen';
 import { useTheme } from '@/hooks/use-theme';
 
-const tabs = ['직관방', '마이페이지'] as const;
+const tabs = ['직관방', '참여 중인 방', '마이페이지'] as const;
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -30,7 +31,7 @@ export default function HomeScreen() {
     }
   }
   function onPageSettled(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (width) setActiveTab(Math.max(0, Math.min(1, Math.round(event.nativeEvent.contentOffset.x / width))));
+    if (width) setActiveTab(Math.max(0, Math.min(tabs.length - 1, Math.round(event.nativeEvent.contentOffset.x / width))));
   }
   if (!session || session.needProfile) return null;
 
@@ -42,6 +43,7 @@ export default function HomeScreen() {
           <ScrollView ref={pager} horizontal pagingEnabled bounces={false} showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={onPageSettled} style={styles.screen}>
             <View style={{ width }}><RoomListScreen /></View>
+            <View style={{ width }}><JoinedRoomsScreen active={activeTab === 1} onBrowseRooms={() => changeTab(0)} /></View>
             <View style={{ width }}><MyPage /></View>
           </ScrollView>
         )}

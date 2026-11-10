@@ -20,6 +20,9 @@ function AppStack() {
         <Stack.Screen name="edit-profile" />
         <Stack.Screen name="create-room" />
         <Stack.Screen name="room-detail/[roomId]" />
+        <Stack.Screen name="user-profile/[userId]" />
+        <Stack.Screen name="blocked-users" />
+        <Stack.Screen name="report" />
         <Stack.Screen name="room-chat/[roomId]" />
       </Stack.Protected>
     </Stack>

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getMockProfileSummaries, type SocialProvider } from '@/features/auth/mock-session';
+import { blockedNickname, getMockBlocks, mockBlocksBetween } from '@/features/moderation/mock-moderation-store';
 
 import { validateRoomRequest, type CreateRoomRequest } from './create-room';
 import { getMockRooms } from './mock-rooms';
@@ -27,7 +28,7 @@ export type ChatMessageResponse = {
   createdAt: string;
 };
 
-type StoredRoom = Omit<RoomResponse, 'participantCount'>;
+type StoredRoom = Omit<RoomResponse, 'participantCount'> & { creatorId?: number };
 type RoomMember = { userId: number; afterMessageId: number; joinedAt?: string };
 
 export type RoomParticipant = {
@@ -82,10 +83,10 @@ async function readState(): Promise<RoomState> {
   return 'members' in state ? state : migrateState(state);
 }
 
-function writeState<T>(update: (state: RoomState) => T): Promise<T> {
+function writeState<T>(update: (state: RoomState) => T | Promise<T>): Promise<T> {
   const write = pendingWrite.then(async () => {
     const state = await readState();
-    const result = update(state);
+    const result = await update(state);
     await AsyncStorage.setItem(storageKey, JSON.stringify(state));
     return result;
   });
@@ -129,7 +130,7 @@ export async function listMockRooms(userId: number) {
 }
 
 export async function loadMockRoomDetail(roomId: number, userId: number) {
-  const [state, profiles] = await Promise.all([readState(), getMockProfileSummaries()]);
+  const [state, profiles, blocks] = await Promise.all([readState(), getMockProfileSummaries(), getMockBlocks(userId)]);
   const today = new Date();
   const room = findRoom(state, roomId, today);
   const fixture = getMockRooms(today).find((sample) => sample.id === roomId);
@@ -151,7 +152,26 @@ export async function loadMockRoomDetail(roomId: number, userId: number) {
       joinedAt: member.joinedAt ?? null,
     };
   });
-  return { room, participants: [...sampleParticipants, ...storedParticipants], joined: memberChatStart(state, roomId, userId) !== undefined };
+  const blockedIds = new Set(blocks.map((block) => block.blockedId));
+  const participants = [...sampleParticipants, ...storedParticipants].map((participant) => ({
+    ...participant, nickname: blockedNickname(participant.nickname, blockedIds.has(participant.userId)),
+  }));
+  const creatorId = state.createdRooms.find((created) => created.id === roomId)?.creatorId ?? room.hostId;
+  return { room, participants, creatorId, joined: memberChatStart(state, roomId, userId) !== undefined };
+}
+
+export async function loadMockUserProfile(targetId: number, viewerId: number) {
+  const [profiles, blocks] = await Promise.all([getMockProfileSummaries(), getMockBlocks(viewerId)]);
+  const provider = (Object.keys(mockRoomUserIds) as SocialProvider[]).find((key) => mockRoomUserIds[key] === targetId);
+  const profile = provider ? profiles[provider] : undefined;
+  const fixture = getMockRooms(new Date()).flatMap((room) => Array.from({ length: room.participantCount }, (_, index) => ({
+    id: index === 0 ? room.hostId : 10000 + room.id * 100 + index, nickname: `직관친구 ${index + 1}`,
+  }))).find((person) => person.id === targetId);
+  if (!profile && !fixture) throw new Error('사용자를 찾을 수 없어요.');
+  const blocked = blocks.some((block) => block.blockedId === targetId);
+  return { id: targetId, nickname: blockedNickname(profile?.nickname ?? fixture?.nickname ?? null, blocked),
+    avatarUrl: profile?.avatarUrl ?? null, bio: profile?.bio ?? null,
+    favoriteKboTeamId: profile?.favoriteKboTeamId ?? null, favoriteKleagueTeamId: profile?.favoriteKleagueTeamId ?? null, blocked };
 }
 
 export function createMockRoom(userId: number, request: CreateRoomRequest) {
@@ -161,7 +181,7 @@ export function createMockRoom(userId: number, request: CreateRoomRequest) {
     const rooms = roomsWithCounts(state, today);
     const id = rooms.reduce((max, room) => Math.max(max, room.id), state.lastRoomId) + 1;
     const chatThreadId = rooms.reduce((max, room) => Math.max(max, room.chatThreadId), state.lastChatThreadId) + 1;
-    const room = { ...details, id, chatThreadId, hostId: userId };
+    const room = { ...details, id, chatThreadId, hostId: userId, creatorId: userId };
     state.createdRooms.push(room);
     state.members[id] = [{ userId, afterMessageId: 0, joinedAt: new Date().toISOString() }];
     state.lastRoomId = id;
@@ -171,10 +191,12 @@ export function createMockRoom(userId: number, request: CreateRoomRequest) {
 }
 
 export function joinMockRoom(roomId: number, userId: number) {
-  return writeState((state) => {
+  return writeState(async (state) => {
     const today = new Date();
     const room = findRoom(state, roomId, today);
     if (memberChatStart(state, roomId, userId) !== undefined) return;
+    const creatorId = state.createdRooms.find((created) => created.id === roomId)?.creatorId ?? room.hostId;
+    if (await mockBlocksBetween(userId, creatorId)) throw new Error('차단 관계로 이 방에 참여할 수 없어요.');
     if (room.gameDate < gameDateKey(today)) throw new Error('경기 날짜가 지난 방이에요.');
     if (room.participantCount >= room.capacity) throw new Error('방 정원이 가득 찼어요.');
 
@@ -208,12 +230,16 @@ export function leaveMockRoom(roomId: number, userId: number) {
 }
 
 export async function loadMockRoomChat(roomId: number, userId: number) {
-  const state = await readState();
+  const [state, blocks] = await Promise.all([readState(), getMockBlocks(userId)]);
   const room = findRoom(state, roomId, new Date());
   const start = memberChatStart(state, roomId, userId);
   if (start === undefined) throw new Error('참여한 방의 채팅만 열 수 있어요.');
 
-  return { room, messages: (state.messages[roomId] ?? []).filter(({ id }) => id > start) };
+  const blockedIds = new Set(blocks.map((block) => block.blockedId));
+  const messages = (state.messages[roomId] ?? []).filter(({ id }) => id > start).map((message) => ({
+    ...message, senderNickname: blockedNickname(message.senderNickname, blockedIds.has(message.senderId)),
+  }));
+  return { room, messages };
 }
 
 export function sendMockRoomMessage(roomId: number, sender: { id: number; nickname: string }, body: string) {

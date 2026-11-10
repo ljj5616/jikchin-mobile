@@ -52,6 +52,10 @@ export function MyPage() {
           </View>
         ))}
       </View>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/blocked-users')} style={[styles.settingsRow, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
+        <ThemedText type="smallBold">차단한 사용자</ThemedText>
+        <ThemedText themeColor="textSecondary">›</ThemedText>
+      </Pressable>
       <Pressable accessibilityRole="button" onPress={signOut} style={styles.signOut}>
         <ThemedText type="smallBold" themeColor="textSecondary">로그아웃</ThemedText>
       </Pressable>
@@ -76,4 +80,5 @@ const styles = StyleSheet.create({
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingTop: Spacing.three, borderTopWidth: StyleSheet.hairlineWidth },
   teamName: { flex: 1, textAlign: 'right' },
   signOut: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.two },
+  settingsRow: { minHeight: 56, paddingHorizontal: Spacing.four, borderWidth: 1, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

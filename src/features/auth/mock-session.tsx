@@ -34,12 +34,12 @@ async function readProfiles(): Promise<MockProfiles> {
   return stored ? (JSON.parse(stored) as MockProfiles) : {};
 }
 
-export async function getMockProfileSummaries(): Promise<Partial<Record<SocialProvider, { nickname: string; avatarUrl: string | null }>>> {
+export async function getMockProfileSummaries(): Promise<Partial<Record<SocialProvider, CompleteProfileRequest & { avatarUrl: string | null }>>> {
   const profiles = await readProfiles();
-  const summaries: Partial<Record<SocialProvider, { nickname: string; avatarUrl: string | null }>> = {};
+  const summaries: Partial<Record<SocialProvider, CompleteProfileRequest & { avatarUrl: string | null }>> = {};
   for (const provider of ['google', 'kakao', 'naver'] as const) {
     const profile = profiles[provider];
-    if (profile) summaries[provider] = { nickname: profile.nickname, avatarUrl: profile.localAvatarUri ?? null };
+    if (profile) summaries[provider] = { ...profile, avatarUrl: profile.localAvatarUri ?? null };
   }
   return summaries;
 }

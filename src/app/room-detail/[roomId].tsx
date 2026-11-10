@@ -79,7 +79,11 @@ export default function RoomDetailScreen() {
             <ThemedText type="smallBold" themeColor="textSecondary">‹ 뒤로</ThemedText>
           </Pressable>
           <ThemedText type="smallBold">방 상세</ThemedText>
-          <View style={styles.toolbarSpacer} />
+          {detail && detail.creatorId !== userId ? (
+            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/report', params: { targetType: 'ROOM', targetId: roomId } })} style={styles.back}>
+              <ThemedText type="smallBold" themeColor="textSecondary">신고</ThemedText>
+            </Pressable>
+          ) : <View style={styles.toolbarSpacer} />}
         </View>
         {detail ? (
           <>
@@ -100,7 +104,9 @@ export default function RoomDetailScreen() {
                   <ThemedText type="smallBold" themeColor="textSecondary">{detail.room.participantCount}/{detail.room.capacity}명</ThemedText>
                 </View>
                 {detail.participants.map((participant) => (
-                  <View key={participant.userId} style={[styles.participant, { borderColor: theme.backgroundSelected }]}>
+                  <Pressable key={participant.userId} accessibilityRole="button" accessibilityLabel={`${participant.nickname ?? '사용자'} 프로필 보기`}
+                    onPress={() => router.push({ pathname: '/user-profile/[userId]', params: { userId: participant.userId } })}
+                    style={[styles.participant, { borderColor: theme.backgroundSelected }]}>
                     <View style={styles.avatar}>
                       {participant.avatarUrl ? <Image source={participant.avatarUrl} style={styles.avatarImage} contentFit="cover" /> : (
                         <ThemedText style={styles.avatarText}>{(participant.nickname ?? '?').slice(0, 1)}</ThemedText>
@@ -109,7 +115,7 @@ export default function RoomDetailScreen() {
                     <ThemedText style={styles.participantName}>{participant.nickname ?? '알 수 없는 사용자'}</ThemedText>
                     {participant.userId === userId && <ThemedText type="small" themeColor="textSecondary">나</ThemedText>}
                     {participant.host && <View style={styles.hostBadge}><ThemedText type="smallBold" style={styles.hostText}>방장</ThemedText></View>}
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </ScrollView>

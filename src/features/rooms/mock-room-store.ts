@@ -229,6 +229,35 @@ export function leaveMockRoom(roomId: number, userId: number) {
   });
 }
 
+export function withdrawMockRooms(userId: number, retiredId: number) {
+  return writeState((state) => {
+    const rooms = roomsWithCounts(state, new Date());
+    for (const room of rooms) {
+      const members = state.members[room.id] ?? [];
+      if (!members.some((member) => member.userId === userId)) continue;
+      const remaining = members.filter((member) => member.userId !== userId);
+      if (remaining.length) state.members[room.id] = remaining;
+      else delete state.members[room.id];
+
+      if (room.hostId === userId) {
+        if (remaining.length) {
+          state.createdRooms = state.createdRooms.map((created) => created.id === room.id
+            ? { ...created, creatorId: created.creatorId ?? userId, hostId: remaining[0].userId } : created);
+        } else {
+          state.createdRooms = state.createdRooms.filter((created) => created.id !== room.id);
+          delete state.messages[room.id];
+        }
+      }
+    }
+    state.createdRooms = state.createdRooms.map((room) => room.creatorId === userId
+      ? { ...room, creatorId: retiredId } : room);
+    for (const [roomId, messages] of Object.entries(state.messages)) {
+      state.messages[Number(roomId)] = messages?.map((message) => message.senderId === userId
+        ? { ...message, senderId: retiredId, senderNickname: '탈퇴한 회원', senderAvatarUrl: '' } : message);
+    }
+  });
+}
+
 export async function loadMockRoomChat(roomId: number, userId: number) {
   const [state, blocks] = await Promise.all([readState(), getMockBlocks(userId)]);
   const room = findRoom(state, roomId, new Date());

@@ -72,6 +72,17 @@ export function unblockMockUser(userId: number, targetId: number) {
   return writeState((state) => { state.blocks = state.blocks.filter((block) => block.blockerId !== userId || block.blockedId !== targetId); });
 }
 
+export function withdrawMockModeration(userId: number, retiredId: number) {
+  return writeState((state) => {
+    state.blocks = state.blocks.filter((block) => block.blockerId !== userId && block.blockedId !== userId);
+    state.reports = state.reports.map((report) => ({
+      ...report,
+      reporterId: report.reporterId === userId ? retiredId : report.reporterId,
+      targetId: report.targetType === 'USER' && report.targetId === userId ? retiredId : report.targetId,
+    }));
+  });
+}
+
 export function blockedNickname(nickname: string | null, blocked: boolean) {
   return nickname && blocked ? `${nickname}(차단)` : nickname;
 }

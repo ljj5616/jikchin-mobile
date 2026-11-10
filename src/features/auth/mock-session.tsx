@@ -23,6 +23,7 @@ type MockSessionContextValue = {
   checkNickname: (nickname: string) => Promise<{ available: boolean }>;
   completeProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
   updateProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
+  removeProfile: () => Promise<void>;
   signOut: () => void;
 };
 
@@ -92,9 +93,17 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
     return true;
   }
 
+  async function removeProfile() {
+    if (!session || session.needProfile) throw new Error('A completed profile is required');
+    const profiles = await readProfiles();
+    delete profiles[session.provider];
+    await AsyncStorage.setItem(profilesKey, JSON.stringify(profiles));
+    setSession(null);
+  }
+
   return (
     <MockSessionContext.Provider
-      value={{ session, signIn, checkNickname, completeProfile, updateProfile, signOut: () => setSession(null) }}>
+      value={{ session, signIn, checkNickname, completeProfile, updateProfile, removeProfile, signOut: () => setSession(null) }}>
       {children}
     </MockSessionContext.Provider>
   );

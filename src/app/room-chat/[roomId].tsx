@@ -37,11 +37,12 @@ function MessageBubble({ message, own, onPressSender }: { message: ChatMessageRe
 
   return (
     <View style={[styles.message, own && styles.ownMessage]}>
-      {!own && (
+      {!own && message.senderId > 0 && (
         <Pressable accessibilityRole="button" accessibilityLabel={`${message.senderNickname ?? '사용자'} 프로필 보기`} onPress={onPressSender}>
           <ThemedText type="smallBold">{message.senderNickname ?? '알 수 없는 사용자'}</ThemedText>
         </Pressable>
       )}
+      {!own && message.senderId <= 0 && <ThemedText type="smallBold">탈퇴한 회원</ThemedText>}
       <View style={[styles.bubble, { backgroundColor: own ? '#2554DB' : theme.backgroundElement }]}>
         <ThemedText style={own && styles.lightText}>{message.body}</ThemedText>
       </View>

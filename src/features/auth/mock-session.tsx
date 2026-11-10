@@ -14,13 +14,15 @@ type Session =
       avatarUri: string | null;
     };
 
-type MockProfiles = Partial<Record<SocialProvider, CompleteProfileRequest>>;
+type StoredProfile = CompleteProfileRequest & { localAvatarUri?: string | null };
+type MockProfiles = Partial<Record<SocialProvider, StoredProfile>>;
 
 type MockSessionContextValue = {
   session: Session | null;
   signIn: (provider: SocialProvider) => Promise<void>;
   checkNickname: (nickname: string) => Promise<{ available: boolean }>;
   completeProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
+  updateProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
   signOut: () => void;
 };
 
@@ -46,13 +48,15 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
 
     const profile = (await readProfiles())[provider];
     const nextSession: Session = profile
-      ? { provider, needProfile: false, profile, avatarUri: null }
+      ? { provider, needProfile: false, profile, avatarUri: profile.localAvatarUri ?? null }
       : { provider, needProfile: true };
     setSession((current) => current ?? nextSession);
   }
 
   async function checkNickname(nickname: string) {
-    return { available: nicknameIsAvailable(await readProfiles(), nickname) };
+    const profiles = await readProfiles();
+    if (session && !session.needProfile) delete profiles[session.provider];
+    return { available: nicknameIsAvailable(profiles, nickname) };
   }
 
   async function completeProfile(profile: CompleteProfileRequest, avatarUri: string | null) {
@@ -61,14 +65,26 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
     const profiles = await readProfiles();
     if (!nicknameIsAvailable(profiles, profile.nickname)) return false;
 
-    await AsyncStorage.setItem(profilesKey, JSON.stringify({ ...profiles, [session.provider]: profile }));
+    await AsyncStorage.setItem(profilesKey, JSON.stringify({ ...profiles, [session.provider]: { ...profile, localAvatarUri: avatarUri } }));
     setSession({ provider: session.provider, needProfile: false, profile, avatarUri });
+    return true;
+  }
+
+  async function updateProfile(profile: CompleteProfileRequest, avatarUri: string | null) {
+    if (!session || session.needProfile) throw new Error('A completed profile is required');
+    const profiles = await readProfiles();
+    const otherProfiles = { ...profiles };
+    delete otherProfiles[session.provider];
+    if (!nicknameIsAvailable(otherProfiles, profile.nickname)) return false;
+
+    await AsyncStorage.setItem(profilesKey, JSON.stringify({ ...profiles, [session.provider]: { ...profile, localAvatarUri: avatarUri } }));
+    setSession({ ...session, profile, avatarUri });
     return true;
   }
 
   return (
     <MockSessionContext.Provider
-      value={{ session, signIn, checkNickname, completeProfile, signOut: () => setSession(null) }}>
+      value={{ session, signIn, checkNickname, completeProfile, updateProfile, signOut: () => setSession(null) }}>
       {children}
     </MockSessionContext.Provider>
   );

@@ -17,6 +17,7 @@ function AppStack() {
       </Stack.Protected>
       <Stack.Protected guard={session?.needProfile === false}>
         <Stack.Screen name="home" />
+        <Stack.Screen name="edit-profile" />
         <Stack.Screen name="create-room" />
         <Stack.Screen name="room-chat/[roomId]" />
       </Stack.Protected>

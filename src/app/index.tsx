@@ -1,11 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession, type SocialProvider } from '@/features/auth/mock-session';
+import { getSocialToken } from '@/features/auth/social-sign-in';
 import { useTheme } from '@/hooks/use-theme';
 
 const loginOptions = [
@@ -35,19 +36,23 @@ const loginOptions = [
 export default function LoginScreen() {
   const { background } = useTheme();
   const { signIn } = useMockSession();
+  const inProgress = useRef(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function startSignIn(provider: SocialProvider) {
-    if (isSigningIn) return;
+    if (inProgress.current) return;
 
+    inProgress.current = true;
     setIsSigningIn(true);
     setError(null);
     try {
-      await signIn(provider);
-    } catch {
-      setError('임시 계정을 불러오지 못했어요. 다시 시도해 주세요.');
+      const token = await getSocialToken(provider);
+      if (token) await signIn(provider, token);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '로그인하지 못했어요. 다시 시도해 주세요.');
     } finally {
+      inProgress.current = false;
       setIsSigningIn(false);
     }
   }
@@ -80,7 +85,8 @@ export default function LoginScreen() {
               <Pressable
                 key={provider}
                 accessibilityRole="button"
-                disabled={!__DEV__ || isSigningIn}
+                accessibilityState={{ disabled: isSigningIn, busy: isSigningIn }}
+                disabled={isSigningIn}
                 onPress={() => startSignIn(provider)}
                 style={({ pressed }) => [
                   styles.button,
@@ -91,13 +97,17 @@ export default function LoginScreen() {
               </Pressable>
             ))}
           </View>
-          <ThemedText
-            accessibilityLiveRegion="polite"
-            themeColor="textSecondary"
-            type="small"
-            style={styles.centeredText}>
-            {error ?? (__DEV__ ? '개발용 임시 로그인' : '소셜 로그인 연동을 준비하고 있어요.')}
-          </ThemedText>
+          {(error || isSigningIn) && (
+            <ThemedText
+              accessibilityRole={error ? 'alert' : undefined}
+              accessibilityLiveRegion="polite"
+              selectable={error !== null}
+              themeColor="textSecondary"
+              type="small"
+              style={styles.centeredText}>
+              {error ?? '로그인 중이에요.'}
+            </ThemedText>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

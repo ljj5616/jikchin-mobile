@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { AuthApiError } from '@/features/auth/auth-api';
 import { useMockSession } from '@/features/auth/mock-session';
 import { bioMaxLength, nicknameMaxLength, type League } from '@/features/onboarding/profile';
 import { ProfilePhoto } from '@/features/onboarding/profile-photo';
@@ -21,7 +22,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 export default function ProfileSetupScreen() {
   const theme = useTheme();
-  const { checkNickname, completeProfile, signOut } = useMockSession();
+  const { session, checkNickname, completeProfile, signOut } = useMockSession();
   const [nickname, setNickname] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -49,8 +50,9 @@ export default function ProfileSetupScreen() {
         value: trimmedNickname,
         message: available ? '사용할 수 있는 닉네임이에요.' : '이미 사용 중인 닉네임이에요.',
       });
-    } catch {
-      setNicknameFeedback({ value: trimmedNickname, message: '닉네임을 확인하지 못했어요. 다시 시도해 주세요.' });
+    } catch (error) {
+      const message = error instanceof AuthApiError ? error.message : '닉네임을 확인하지 못했어요. 다시 시도해 주세요.';
+      setNicknameFeedback({ value: trimmedNickname, message });
     } finally {
       setIsChecking(false);
     }
@@ -68,7 +70,6 @@ export default function ProfileSetupScreen() {
     try {
       const profile = {
         nickname: trimmedNickname,
-        // The upload API will issue avatarKey. The preview URI is local to this session.
         avatarKey: null,
         bio: bio.trim() || null,
         favoriteKboTeamId,
@@ -76,8 +77,8 @@ export default function ProfileSetupScreen() {
       };
       const saved = await completeProfile(profile, avatarUri);
       if (!saved) setSaveError('이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.');
-    } catch {
-      setSaveError('임시 프로필을 저장하지 못했어요. 다시 시도해 주세요.');
+    } catch (error) {
+      setSaveError(error instanceof AuthApiError ? error.message : '프로필을 저장하지 못했어요. 다시 시도해 주세요.');
     } finally {
       setIsSaving(false);
     }
@@ -154,6 +155,7 @@ export default function ProfileSetupScreen() {
             </View>
             <TeamField
               league="KBO"
+              teams={session?.teams.KBO}
               label="KBO 응원팀"
               value={favoriteKboTeamId}
               expanded={expandedLeague === 'KBO'}
@@ -165,6 +167,7 @@ export default function ProfileSetupScreen() {
             />
             <TeamField
               league="KLEAGUE"
+              teams={session?.teams.KLEAGUE}
               label="K리그1 응원팀"
               value={favoriteKleagueTeamId}
               expanded={expandedLeague === 'KLEAGUE'}

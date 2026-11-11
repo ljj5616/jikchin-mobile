@@ -4,10 +4,11 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-import { onboardingTeams, type League } from './profile';
+import { onboardingTeams, type League, type Team } from './profile';
 
 type TeamFieldProps = {
   league: League;
+  teams?: Team[];
   label: string;
   value: number | null;
   required?: boolean;
@@ -16,9 +17,8 @@ type TeamFieldProps = {
   onSelect: (teamId: number | null) => void;
 };
 
-export function TeamField({ league, label, value, required = false, expanded, onToggle, onSelect }: TeamFieldProps) {
+export function TeamField({ league, teams = onboardingTeams[league], label, value, required = false, expanded, onToggle, onSelect }: TeamFieldProps) {
   const theme = useTheme();
-  const teams = onboardingTeams[league];
   const selectedName = teams.find((team) => team.id === value)?.name ?? (required ? '팀을 선택해 주세요' : '선택 안 함');
   const options = required ? teams : [{ id: null, name: '선택 안 함' }, ...teams];
 

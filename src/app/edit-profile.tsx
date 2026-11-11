@@ -157,6 +157,7 @@ export default function EditProfileScreen() {
             </View>
             <TeamField
               league="KBO"
+              teams={current?.teams.KBO}
               label="KBO 응원팀"
               value={favoriteKboTeamId}
               expanded={expandedLeague === 'KBO'}
@@ -168,6 +169,7 @@ export default function EditProfileScreen() {
             />
             <TeamField
               league="KLEAGUE"
+              teams={current?.teams.KLEAGUE}
               label="K리그1 응원팀"
               value={favoriteKleagueTeamId}
               expanded={expandedLeague === 'KLEAGUE'}

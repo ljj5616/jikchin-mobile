@@ -1,25 +1,40 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
-import type { CompleteProfileRequest } from '@/features/onboarding/profile';
+import type { CompleteProfileRequest, League, Team } from '@/features/onboarding/profile';
 
-export type SocialProvider = 'google' | 'kakao' | 'naver';
+import {
+  AuthApiError,
+  checkAccountNickname,
+  completeAccountProfile,
+  getAccountProfile,
+  getAccountTeams,
+  loginWithProvider,
+  revokeSession,
+  uploadOnboardingAvatar,
+  type AuthTokens,
+  type SocialProvider,
+} from './auth-api';
 
-type Session =
-  | { provider: SocialProvider; needProfile: true }
-  | {
-      provider: SocialProvider;
+export type { SocialProvider } from './auth-api';
+
+type SessionBase = { provider: SocialProvider; teams: Record<League, Team[]> };
+
+type Session = SessionBase & (
+  | { needProfile: true; accessToken: string }
+  | (AuthTokens & {
       needProfile: false;
       profile: CompleteProfileRequest;
       avatarUri: string | null;
-    };
+    })
+);
 
 type StoredProfile = CompleteProfileRequest & { localAvatarUri?: string | null };
 type MockProfiles = Partial<Record<SocialProvider, StoredProfile>>;
 
 type MockSessionContextValue = {
   session: Session | null;
-  signIn: (provider: SocialProvider) => Promise<void>;
+  signIn: (provider: SocialProvider, providerToken: string) => Promise<void>;
   checkNickname: (nickname: string) => Promise<{ available: boolean }>;
   completeProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
   updateProfile: (profile: CompleteProfileRequest, avatarUri: string | null) => Promise<boolean>;
@@ -54,17 +69,41 @@ function nicknameIsAvailable(profiles: MockProfiles, nickname: string) {
 export function MockSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
 
-  async function signIn(provider: SocialProvider) {
-    if (!__DEV__) return;
+  async function signIn(provider: SocialProvider, providerToken: string) {
+    const result = await loginWithProvider(provider, providerToken);
 
-    const profile = (await readProfiles())[provider];
-    const nextSession: Session = profile
-      ? { provider, needProfile: false, profile, avatarUri: profile.localAvatarUri ?? null }
-      : { provider, needProfile: true };
-    setSession((current) => current ?? nextSession);
+    try {
+      if (result.needProfile) {
+        const teams = await getAccountTeams(result.accessToken);
+        setSession({ provider, teams, needProfile: true, accessToken: result.accessToken });
+        return;
+      }
+
+      const [profile, teams] = await Promise.all([
+        getAccountProfile(result.accessToken),
+        getAccountTeams(result.accessToken),
+      ]);
+      setSession({
+        ...result,
+        provider,
+        teams,
+        avatarUri: profile.avatarUrl,
+        profile: {
+          nickname: profile.nickname,
+          avatarKey: profile.avatarKey,
+          bio: profile.bio,
+          favoriteKboTeamId: profile.favoriteKboTeam?.id ?? null,
+          favoriteKleagueTeamId: profile.favoriteKleagueTeam?.id ?? null,
+        },
+      });
+    } catch (error) {
+      if (result.refreshToken) void revokeSession(result.refreshToken).catch(() => {});
+      throw error;
+    }
   }
 
   async function checkNickname(nickname: string) {
+    if (session?.needProfile) return checkAccountNickname(session.accessToken, nickname);
     const profiles = await readProfiles();
     if (session && !session.needProfile) delete profiles[session.provider];
     return { available: nicknameIsAvailable(profiles, nickname) };
@@ -73,11 +112,23 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
   async function completeProfile(profile: CompleteProfileRequest, avatarUri: string | null) {
     if (!session?.needProfile) throw new Error('An onboarding session is required');
 
-    const profiles = await readProfiles();
-    if (!nicknameIsAvailable(profiles, profile.nickname)) return false;
-
-    await AsyncStorage.setItem(profilesKey, JSON.stringify({ ...profiles, [session.provider]: { ...profile, localAvatarUri: avatarUri } }));
-    setSession({ provider: session.provider, needProfile: false, profile, avatarUri });
+    const { available } = await checkAccountNickname(session.accessToken, profile.nickname);
+    if (!available) return false;
+    const avatar = avatarUri ? await uploadOnboardingAvatar(session.accessToken, avatarUri) : null;
+    const submittedProfile = { ...profile, avatarKey: avatar?.avatarKey ?? null };
+    let tokens: AuthTokens;
+    try {
+      tokens = await completeAccountProfile(session.accessToken, submittedProfile);
+    } catch (error) {
+      if (error instanceof AuthApiError && error.status === 400) {
+        const latest = await checkAccountNickname(session.accessToken, profile.nickname);
+        if (!latest.available) return false;
+      }
+      throw error;
+    }
+    setSession((current) => current === session
+      ? { ...session, ...tokens, needProfile: false, profile: submittedProfile, avatarUri }
+      : current);
     return true;
   }
 
@@ -98,12 +149,17 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
     const profiles = await readProfiles();
     delete profiles[session.provider];
     await AsyncStorage.setItem(profilesKey, JSON.stringify(profiles));
+    signOut();
+  }
+
+  function signOut() {
     setSession(null);
+    if (session && !session.needProfile) void revokeSession(session.refreshToken).catch(() => {});
   }
 
   return (
     <MockSessionContext.Provider
-      value={{ session, signIn, checkNickname, completeProfile, updateProfile, removeProfile, signOut: () => setSession(null) }}>
+      value={{ session, signIn, checkNickname, completeProfile, updateProfile, removeProfile, signOut }}>
       {children}
     </MockSessionContext.Provider>
   );

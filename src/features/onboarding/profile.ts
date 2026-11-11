@@ -11,7 +11,7 @@ export type CompleteProfileRequest = {
 
 export type League = 'KBO' | 'KLEAGUE';
 
-type Team = {
+export type Team = {
   id: number;
   name: string;
   shortName: string;

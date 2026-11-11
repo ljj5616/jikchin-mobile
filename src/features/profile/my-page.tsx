@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
 import { withdrawMockModeration } from '@/features/moderation/mock-moderation-store';
-import { onboardingTeams, type League } from '@/features/onboarding/profile';
+import type { League } from '@/features/onboarding/profile';
 import { mockRoomUserIds, withdrawMockRooms } from '@/features/rooms/mock-room-store';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -22,7 +22,7 @@ export function MyPage() {
 
   const { profile, avatarUri } = session;
   const teamName = (league: League, id: number | null) =>
-    onboardingTeams[league].find((team) => team.id === id)?.name ?? '선택한 팀이 없어요';
+    session.teams[league].find((team) => team.id === id)?.name ?? '선택한 팀이 없어요';
 
   async function withdraw() {
     if (!session || session.needProfile || inProgress.current) return;

@@ -44,7 +44,7 @@ export default function HomeScreen() {
             onMomentumScrollEnd={onPageSettled} style={styles.screen}>
             <View style={{ width }}><RoomListScreen /></View>
             <View style={{ width }}><JoinedRoomsScreen active={activeTab === 1} onBrowseRooms={() => changeTab(0)} /></View>
-            <View style={{ width }}><MyPage /></View>
+            <View style={{ width }}><MyPage active={activeTab === 2} /></View>
           </ScrollView>
         )}
       </View>

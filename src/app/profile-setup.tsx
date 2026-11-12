@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { AuthApiError } from '@/features/auth/auth-api';
 import { useMockSession } from '@/features/auth/mock-session';
-import { bioMaxLength, nicknameMaxLength, type League } from '@/features/onboarding/profile';
+import { bioMaxLength, nicknameMaxLength, type League, type ProfilePhotoSelection } from '@/features/onboarding/profile';
 import { ProfilePhoto } from '@/features/onboarding/profile-photo';
 import { TeamField } from '@/features/onboarding/team-field';
 import { useTheme } from '@/hooks/use-theme';
@@ -25,7 +25,7 @@ export default function ProfileSetupScreen() {
   const { session, checkNickname, completeProfile, signOut } = useMockSession();
   const [nickname, setNickname] = useState('');
   const [bio, setBio] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<ProfilePhotoSelection | null>(null);
   const [favoriteKboTeamId, setFavoriteKboTeamId] = useState<number | null>(null);
   const [favoriteKleagueTeamId, setFavoriteKleagueTeamId] = useState<number | null>(null);
   const [expandedLeague, setExpandedLeague] = useState<League | null>(null);
@@ -75,7 +75,7 @@ export default function ProfileSetupScreen() {
         favoriteKboTeamId,
         favoriteKleagueTeamId,
       };
-      const saved = await completeProfile(profile, avatarUri);
+      const saved = await completeProfile(profile, photo);
       if (!saved) setSaveError('이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.');
     } catch (error) {
       setSaveError(error instanceof AuthApiError ? error.message : '프로필을 저장하지 못했어요. 다시 시도해 주세요.');
@@ -130,7 +130,7 @@ export default function ProfileSetupScreen() {
               </ThemedText>
             </View>
 
-            <ProfilePhoto uri={avatarUri} onChange={setAvatarUri} />
+            <ProfilePhoto uri={photo?.uri ?? null} onChange={setPhoto} disabled={isSaving} />
 
             <View style={styles.field}>
               <ThemedText type="smallBold">한 줄 소개 (선택)</ThemedText>

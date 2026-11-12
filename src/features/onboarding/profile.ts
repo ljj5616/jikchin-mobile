@@ -9,6 +9,8 @@ export type CompleteProfileRequest = {
   favoriteKleagueTeamId: number | null;
 };
 
+export type ProfilePhotoSelection = { uri: string; file?: File };
+
 export type League = 'KBO' | 'KLEAGUE';
 
 export type Team = {

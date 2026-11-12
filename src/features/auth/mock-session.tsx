@@ -12,6 +12,7 @@ import {
   completeAccountProfile,
   getAccountProfile,
   getAccountTeams,
+  getCurrentUser,
   getSessionStatus,
   loginWithProvider,
   updateAccountProfile,
@@ -68,6 +69,11 @@ export async function getMockProfileSummaries(): Promise<Partial<Record<SocialPr
   return summaries;
 }
 
+async function loadAccount(session: AuthenticatedSession): Promise<AccountProfile> {
+  const [account, profile] = await Promise.all([getCurrentUser(session), getAccountProfile(session)]);
+  return { ...profile, id: account.id, nickname: account.nickname };
+}
+
 export function MockSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const apiSession = session?.needProfile === false ? session.apiSession : null;
@@ -120,7 +126,7 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
     try {
       await confirmSessionStatus(accountSession, false);
       const [profile, teams] = await Promise.all([
-        getAccountProfile(accountSession),
+        loadAccount(accountSession),
         getAccountTeams(accountSession),
       ]);
       setSession({
@@ -165,7 +171,7 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
     let account: AccountProfile;
     try {
       await confirmSessionStatus(accountSession, false);
-      account = await getAccountProfile(accountSession);
+      account = await loadAccount(accountSession);
     } catch {
       void accountSession.signOut().catch(() => {});
       throw new AuthApiError('프로필은 등록됐어요. 계정 정보를 불러오려면 다시 로그인해 주세요.');

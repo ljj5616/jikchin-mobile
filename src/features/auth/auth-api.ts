@@ -1,4 +1,4 @@
-import type { CompleteProfileRequest, League, Team } from '@/features/onboarding/profile';
+import type { CompleteProfileRequest, League, ProfilePhotoSelection, Team } from '@/features/onboarding/profile';
 
 export type SocialProvider = 'google' | 'kakao' | 'naver';
 
@@ -30,6 +30,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   json?: object;
   form?: FormData;
+  signal?: AbortSignal;
   errorMessages?: Partial<Record<number, string>>;
 };
 
@@ -37,13 +38,16 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
   if (!baseUrl) throw new AuthApiError('API 주소가 설정되지 않았어요. EXPO_PUBLIC_API_URL을 확인해 주세요.');
 
-  const { token, json, form } = options;
+  const { token, json, form, signal } = options;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (json) headers['Content-Type'] = 'application/json';
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(abort, 15000);
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
@@ -77,6 +81,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new AuthApiError('백엔드에 연결할 수 없어요. 서버 실행 상태와 API 주소를 확인해 주세요.');
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -97,8 +102,23 @@ export async function loginWithProvider(provider: SocialProvider, providerToken:
   throw new AuthApiError('서버 로그인 응답에 필요한 정보가 없어요.');
 }
 
-export function getAccountProfile(token: string) {
-  return request<AccountProfile>('/users/me/profile', { token });
+export function getAccountProfile(token: string, signal?: AbortSignal) {
+  return request<AccountProfile>('/users/me/profile', {
+    token, signal, errorMessages: { 404: '프로필을 찾을 수 없어요.' },
+  });
+}
+
+export function updateAccountProfile(token: string, profile: CompleteProfileRequest) {
+  return request<AccountProfile>('/users/me/profile', {
+    token,
+    method: 'PUT',
+    json: profile,
+    errorMessages: {
+      400: '프로필 입력과 선택한 응원팀을 확인해 주세요.',
+      404: '프로필을 찾을 수 없어요.',
+      409: '이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.',
+    },
+  });
 }
 
 export async function getAccountTeams(token: string): Promise<Record<League, Team[]>> {
@@ -109,14 +129,34 @@ export async function getAccountTeams(token: string): Promise<Record<League, Tea
   return { KBO, KLEAGUE };
 }
 
-export function checkAccountNickname(token: string, nickname: string) {
+export function checkOnboardingNickname(token: string, nickname: string) {
   return request<{ available: boolean }>(`/auth/nickname-availability?nickname=${encodeURIComponent(nickname)}`, { token });
 }
 
-export function uploadOnboardingAvatar(token: string, uri: string) {
+export function checkAccountNickname(token: string, nickname: string) {
+  return request<{ available: boolean }>(`/users/me/nickname-availability?nickname=${encodeURIComponent(nickname)}`, { token });
+}
+
+function uploadAvatar(path: string, token: string, photo: ProfilePhotoSelection) {
   const form = new FormData();
-  form.append('file', { uri, name: 'avatar.jpg', type: 'image/jpeg' } as unknown as Blob);
-  return request<{ avatarKey: string }>('/auth/avatar', { token, form });
+  if (photo.file) form.append('file', photo.file, 'avatar.jpg');
+  else form.append('file', { uri: photo.uri, name: 'avatar.jpg', type: 'image/jpeg' } as unknown as Blob);
+  return request<{ avatarKey: string }>(path, {
+    token,
+    form,
+    errorMessages: {
+      400: '5MB 이하, 가로·세로 4096px 이하인 JPEG 사진을 선택해 주세요.',
+      413: '5MB 이하의 사진을 선택해 주세요.',
+    },
+  });
+}
+
+export function uploadOnboardingAvatar(token: string, photo: ProfilePhotoSelection) {
+  return uploadAvatar('/auth/avatar', token, photo);
+}
+
+export function uploadAccountAvatar(token: string, photo: ProfilePhotoSelection) {
+  return uploadAvatar('/users/me/avatar', token, photo);
 }
 
 export async function completeAccountProfile(token: string, profile: CompleteProfileRequest): Promise<AuthTokens> {
@@ -129,4 +169,12 @@ export async function completeAccountProfile(token: string, profile: CompletePro
 
 export function revokeSession(refreshToken: string) {
   return request<void>('/auth/logout', { json: { refreshToken } });
+}
+
+export function withdrawAccount(token: string) {
+  return request<void>('/users/me', {
+    token,
+    method: 'DELETE',
+    errorMessages: { 409: '참여 중인 방이 변경됐어요. 다시 탈퇴를 시도해 주세요.' },
+  });
 }

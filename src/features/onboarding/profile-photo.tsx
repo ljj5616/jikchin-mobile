@@ -7,12 +7,15 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+import type { ProfilePhotoSelection } from './profile';
+
 const maxPhotoBytes = 5 * 1024 * 1024;
 const maxPhotoDimension = 4096;
 
 type ProfilePhotoProps = {
   uri: string | null;
-  onChange: (uri: string | null) => void;
+  onChange: (photo: ProfilePhotoSelection | null) => void;
+  disabled?: boolean;
 };
 
 function validatePhoto(asset: ImagePickerAsset) {
@@ -31,7 +34,7 @@ function validatePhoto(asset: ImagePickerAsset) {
   return null;
 }
 
-export function ProfilePhoto({ uri, onChange }: ProfilePhotoProps) {
+export function ProfilePhoto({ uri, onChange, disabled }: ProfilePhotoProps) {
   const theme = useTheme();
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +46,7 @@ export function ProfilePhoto({ uri, onChange }: ProfilePhotoProps) {
       const asset = result.assets[0];
       const validationError = validatePhoto(asset);
       setError(validationError);
-      if (!validationError) onChange(asset.uri);
+      if (!validationError) onChange({ uri: asset.uri, file: asset.file });
     } catch {
       setError('사진을 열 수 없어요. 다시 시도해 주세요.');
     }
@@ -64,6 +67,7 @@ export function ProfilePhoto({ uri, onChange }: ProfilePhotoProps) {
           <View style={styles.actions}>
             <Pressable
               accessibilityRole="button"
+              disabled={disabled}
               onPress={pickPhoto}
               style={[styles.action, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">{uri ? '사진 변경' : '사진 선택'}</ThemedText>
@@ -71,6 +75,7 @@ export function ProfilePhoto({ uri, onChange }: ProfilePhotoProps) {
             {uri && (
               <Pressable
                 accessibilityRole="button"
+                disabled={disabled}
                 onPress={() => {
                   onChange(null);
                   setError(null);

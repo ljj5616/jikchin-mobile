@@ -1,42 +1,61 @@
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { AuthApiError } from '@/features/auth/auth-api';
 import { useMockSession } from '@/features/auth/mock-session';
-import { withdrawMockModeration } from '@/features/moderation/mock-moderation-store';
-import type { League } from '@/features/onboarding/profile';
-import { mockRoomUserIds, withdrawMockRooms } from '@/features/rooms/mock-room-store';
 import { useTheme } from '@/hooks/use-theme';
 
-export function MyPage() {
+export function MyPage({ active }: { active: boolean }) {
   const theme = useTheme();
-  const { session, signOut, removeProfile } = useMockSession();
+  const { session, signOut, refreshProfile, withdraw } = useMockSession();
+  const [refreshing, setRefreshing] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const refreshRequest = useRef<AbortController | null>(null);
   const inProgress = useRef(false);
+
+  const loadProfile = useCallback(() => {
+    refreshRequest.current?.abort();
+    const controller = new AbortController();
+    refreshRequest.current = controller;
+    setRefreshing(true);
+    setProfileError(null);
+    void refreshProfile(controller.signal)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setProfileError(error instanceof AuthApiError ? error.message : '프로필을 불러오지 못했어요.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRefreshing(false);
+      });
+  }, [refreshProfile]);
+
+  useFocusEffect(useCallback(() => {
+    if (!active) return;
+    loadProfile();
+    return () => refreshRequest.current?.abort();
+  }, [active, loadProfile]));
+
   if (!session || session.needProfile) return null;
 
-  const { profile, avatarUri } = session;
-  const teamName = (league: League, id: number | null) =>
-    session.teams[league].find((team) => team.id === id)?.name ?? '선택한 팀이 없어요';
+  const { profile } = session;
 
-  async function withdraw() {
+  async function confirmWithdrawal() {
     if (!session || session.needProfile || inProgress.current) return;
     inProgress.current = true;
     setWithdrawing(true);
     setWithdrawError(null);
     try {
-      const userId = mockRoomUserIds[session.provider];
-      const retiredId = -Date.now();
-      await withdrawMockRooms(userId, retiredId);
-      await withdrawMockModeration(userId, retiredId);
-      await removeProfile();
-    } catch {
-      setWithdrawError('일부 정보가 정리되었을 수 있어요. 다시 시도해 주세요.');
+      await withdraw();
+    } catch (error) {
+      setWithdrawError(error instanceof AuthApiError ? error.message : '회원 탈퇴를 처리하지 못했어요. 다시 시도해 주세요.');
     } finally {
       inProgress.current = false;
       setWithdrawing(false);
@@ -50,11 +69,19 @@ export function MyPage() {
       <View style={styles.heading}>
         <ThemedText accessibilityRole="header" type="subtitle" style={styles.title}>마이페이지</ThemedText>
         <ThemedText themeColor="textSecondary">나의 프로필과 응원팀을 확인해 보세요.</ThemedText>
+        {profileError && (
+          <>
+            <ThemedText type="small" accessibilityRole="alert">{profileError}</ThemedText>
+            <Pressable accessibilityRole="button" onPress={loadProfile} style={styles.accountAction}>
+              <ThemedText type="smallBold">다시 시도</ThemedText>
+            </Pressable>
+          </>
+        )}
       </View>
       <View style={[styles.card, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
         <View style={styles.profileRow}>
           <View style={styles.avatar}>
-            {avatarUri ? <Image source={avatarUri} style={styles.photo} contentFit="cover" /> : (
+            {profile.avatarUrl ? <Image source={profile.avatarUrl} style={styles.photo} contentFit="cover" /> : (
               <ThemedText style={styles.avatarInitial}>{profile.nickname.slice(0, 1)}</ThemedText>
             )}
           </View>
@@ -63,19 +90,20 @@ export function MyPage() {
             <ThemedText themeColor="textSecondary">{profile.bio || '아직 소개가 없어요.'}</ThemedText>
           </View>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={[styles.editButton, { borderColor: theme.backgroundSelected }]}>
-          <ThemedText type="smallBold">프로필 수정</ThemedText>
+        <Pressable accessibilityRole="button" disabled={refreshing || Boolean(profileError)}
+          onPress={() => router.push('/edit-profile')} style={[styles.editButton, { borderColor: theme.backgroundSelected }]}>
+          <ThemedText type="smallBold">{refreshing ? '프로필 불러오는 중' : '프로필 수정'}</ThemedText>
         </Pressable>
       </View>
       <View style={[styles.card, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
         <ThemedText accessibilityRole="header" style={styles.cardTitle}>나의 응원팀</ThemedText>
         {([
-          ['KBO', 'KBO', profile.favoriteKboTeamId],
-          ['K리그1', 'KLEAGUE', profile.favoriteKleagueTeamId],
-        ] as const).map(([label, league, id]) => (
-          <View key={league} style={[styles.teamRow, { borderColor: theme.backgroundSelected }]}>
+          ['KBO', profile.favoriteKboTeam],
+          ['K리그1', profile.favoriteKleagueTeam],
+        ] as const).map(([label, team]) => (
+          <View key={label} style={[styles.teamRow, { borderColor: theme.backgroundSelected }]}>
             <ThemedText type="smallBold" themeColor="textSecondary">{label}</ThemedText>
-            <ThemedText style={styles.teamName}>{teamName(league, id)}</ThemedText>
+            <ThemedText style={styles.teamName}>{team?.name ?? '선택한 팀이 없어요'}</ThemedText>
           </View>
         ))}
       </View>
@@ -96,14 +124,14 @@ export function MyPage() {
       <View style={styles.overlay}>
         <View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: theme.background }]}>
           <ThemedText accessibilityRole="header" style={styles.cardTitle}>회원 탈퇴할까요?</ThemedText>
-          <ThemedText themeColor="textSecondary">이 기기에 저장된 임시 계정 정보를 삭제하고 로그아웃해요.</ThemedText>
+          <ThemedText themeColor="textSecondary">프로필과 직관 기록이 삭제되고 참여 중인 방에서 나가요. 탈퇴한 계정은 복구할 수 없어요.</ThemedText>
           {withdrawError && <ThemedText accessibilityRole="alert" type="small">{withdrawError}</ThemedText>}
           <View style={styles.dialogActions}>
             <Pressable accessibilityRole="button" disabled={withdrawing} onPress={() => setShowWithdraw(false)}
               style={[styles.dialogButton, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">취소</ThemedText>
             </Pressable>
-            <Pressable accessibilityRole="button" disabled={withdrawing} onPress={withdraw}
+            <Pressable accessibilityRole="button" disabled={withdrawing} onPress={confirmWithdrawal}
               style={[styles.dialogButton, styles.withdrawButton, withdrawing && styles.disabled]}>
               <ThemedText type="smallBold" style={styles.withdrawText}>{withdrawing ? '처리 중' : '탈퇴하기'}</ThemedText>
             </Pressable>

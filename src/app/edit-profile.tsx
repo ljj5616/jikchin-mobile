@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,29 +14,39 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { AuthApiError, uploadAccountAvatar } from '@/features/auth/auth-api';
 import { useMockSession } from '@/features/auth/mock-session';
-import { bioMaxLength, nicknameMaxLength, type League } from '@/features/onboarding/profile';
+import { bioMaxLength, nicknameMaxLength, type League, type ProfilePhotoSelection } from '@/features/onboarding/profile';
 import { ProfilePhoto } from '@/features/onboarding/profile-photo';
 import { TeamField } from '@/features/onboarding/team-field';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function EditProfileScreen() {
   const theme = useTheme();
+  const navigation = useNavigation();
   const { session, checkNickname, updateProfile } = useMockSession();
   const current = session && !session.needProfile ? session : null;
   const [nickname, setNickname] = useState(current?.profile.nickname ?? '');
   const [bio, setBio] = useState(current?.profile.bio ?? '');
-  const [avatarUri, setAvatarUri] = useState<string | null>(current?.avatarUri ?? null);
-  const [favoriteKboTeamId, setFavoriteKboTeamId] = useState<number | null>(current?.profile.favoriteKboTeamId ?? null);
-  const [favoriteKleagueTeamId, setFavoriteKleagueTeamId] = useState<number | null>(current?.profile.favoriteKleagueTeamId ?? null);
+  const [photo, setPhoto] = useState<ProfilePhotoSelection | null>();
+  const [favoriteKboTeamId, setFavoriteKboTeamId] = useState<number | null>(current?.profile.favoriteKboTeam?.id ?? null);
+  const [favoriteKleagueTeamId, setFavoriteKleagueTeamId] = useState<number | null>(current?.profile.favoriteKleagueTeam?.id ?? null);
   const [expandedLeague, setExpandedLeague] = useState<League | null>(null);
   const [nicknameFeedback, setNicknameFeedback] = useState<{ value: string; message: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const saving = useRef(false);
+  const uploadedAvatar = useRef<{ photo: ProfilePhotoSelection; key: string } | null>(null);
 
   const trimmedNickname = nickname.trim();
   const inputColors = { color: theme.text, borderColor: theme.backgroundSelected };
+  const avatarUri = photo === undefined ? current?.profile.avatarUrl ?? null : photo?.uri ?? null;
+
+  function goBack() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/home');
+  }
 
   async function confirmNickname() {
     if (!trimmedNickname) {
@@ -51,40 +61,50 @@ export default function EditProfileScreen() {
         value: trimmedNickname,
         message: available ? '사용할 수 있는 닉네임이에요.' : '이미 사용 중인 닉네임이에요.',
       });
-    } catch {
-      setNicknameFeedback({ value: trimmedNickname, message: '닉네임을 확인하지 못했어요. 다시 시도해 주세요.' });
+    } catch (error) {
+      const message = error instanceof AuthApiError ? error.message : '닉네임을 확인하지 못했어요. 다시 시도해 주세요.';
+      setNicknameFeedback({ value: trimmedNickname, message });
     } finally {
       setIsChecking(false);
     }
   }
 
   async function submitProfile() {
-    if (isSaving) return;
+    if (!current || saving.current) return;
     if (!trimmedNickname) {
       setSaveError('닉네임을 입력해 주세요.');
       return;
     }
 
+    saving.current = true;
     setIsSaving(true);
     setSaveError(null);
     try {
-      const profile = {
+      let avatarKey = photo === null ? null : current.profile.avatarKey;
+      if (photo) {
+        if (uploadedAvatar.current?.photo !== photo) {
+          const upload = await uploadAccountAvatar(current.accessToken, photo);
+          uploadedAvatar.current = { photo, key: upload.avatarKey };
+        }
+        avatarKey = uploadedAvatar.current.key;
+      }
+      await updateProfile({
         nickname: trimmedNickname,
-        // Preserve the existing server key until a real upload flow is connected.
-        avatarKey: current?.profile.avatarKey ?? null,
+        avatarKey,
         bio: bio.trim() || null,
         favoriteKboTeamId,
         favoriteKleagueTeamId,
-      };
-      const saved = await updateProfile(profile, avatarUri);
-      if (saved) router.back();
-      else setSaveError('이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.');
-    } catch {
-      setSaveError('임시 프로필을 저장하지 못했어요. 다시 시도해 주세요.');
+      });
+      if (navigation.isFocused()) goBack();
+    } catch (error) {
+      setSaveError(error instanceof AuthApiError ? error.message : '프로필을 저장하지 못했어요. 다시 시도해 주세요.');
     } finally {
+      saving.current = false;
       setIsSaving(false);
     }
   }
+
+  if (!current) return null;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -92,7 +112,7 @@ export default function EditProfileScreen() {
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
           <View style={styles.intro}>
-            <Pressable accessibilityRole="button" disabled={isSaving} onPress={() => router.back()} style={styles.back}>
+            <Pressable accessibilityRole="button" disabled={isSaving} onPress={goBack} style={styles.back}>
               <ThemedText type="smallBold" themeColor="textSecondary">마이페이지로 돌아가기</ThemedText>
             </Pressable>
             <ThemedText accessibilityRole="header" type="subtitle" style={styles.title}>프로필 수정</ThemedText>
@@ -107,6 +127,7 @@ export default function EditProfileScreen() {
                   accessibilityLabel="닉네임"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  editable={!isSaving}
                   maxLength={nicknameMaxLength}
                   value={nickname}
                   onChangeText={(value) => {
@@ -132,13 +153,14 @@ export default function EditProfileScreen() {
               </ThemedText>
             </View>
 
-            <ProfilePhoto uri={avatarUri} onChange={setAvatarUri} />
+            <ProfilePhoto uri={avatarUri} onChange={setPhoto} disabled={isSaving} />
 
             <View style={styles.field}>
               <ThemedText type="smallBold">한 줄 소개 (선택)</ThemedText>
               <TextInput
                 accessibilityLabel="한 줄 소개"
                 multiline
+                editable={!isSaving}
                 maxLength={bioMaxLength}
                 value={bio}
                 onChangeText={setBio}
@@ -157,7 +179,8 @@ export default function EditProfileScreen() {
             </View>
             <TeamField
               league="KBO"
-              teams={current?.teams.KBO}
+              teams={current.teams.KBO}
+              disabled={isSaving}
               label="KBO 응원팀"
               value={favoriteKboTeamId}
               expanded={expandedLeague === 'KBO'}
@@ -169,7 +192,8 @@ export default function EditProfileScreen() {
             />
             <TeamField
               league="KLEAGUE"
-              teams={current?.teams.KLEAGUE}
+              teams={current.teams.KLEAGUE}
+              disabled={isSaving}
               label="K리그1 응원팀"
               value={favoriteKleagueTeamId}
               expanded={expandedLeague === 'KLEAGUE'}

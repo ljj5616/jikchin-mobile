@@ -110,9 +110,9 @@ export function RoomListScreen() {
             <View style={styles.toolbar}>
               <ThemedText type="smallBold">직관친구</ThemedText>
               <View style={styles.account}>
-                {session.avatarUri && (
+                {session.profile.avatarUrl && (
                   <Image
-                    source={session.avatarUri}
+                    source={session.profile.avatarUrl}
                     accessibilityLabel={`${session.profile.nickname}님의 프로필 사진`}
                     style={styles.photo}
                     contentFit="cover"

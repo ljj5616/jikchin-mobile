@@ -16,7 +16,7 @@ type BlockedUser = Awaited<ReturnType<typeof listBlockedUsers>>[number];
 export default function BlockedUsersScreen() {
   const theme = useTheme();
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const [users, setUsers] = useState<BlockedUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<BlockedUser | null>(null);
@@ -25,16 +25,16 @@ export default function BlockedUsersScreen() {
   const processing = useRef(false);
 
   const load = useCallback(async () => {
-    if (!token) return;
+    if (!apiSession) return;
     const request = ++requestId.current;
     setError(null);
     try {
-      const result = await listBlockedUsers(token);
+      const result = await listBlockedUsers(apiSession);
       if (request === requestId.current) setUsers(result);
     } catch {
       if (request === requestId.current) setError('차단 목록을 불러오지 못했어요.');
     }
-  }, [token]);
+  }, [apiSession]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -42,10 +42,10 @@ export default function BlockedUsersScreen() {
   }, [load]));
 
   async function unblock() {
-    if (!selected || !token || processing.current) return;
+    if (!selected || !apiSession || processing.current) return;
     processing.current = true;
     setSaving(true);
-    try { await setUserBlocked(token, selected.userId, false); setSelected(null); await load(); }
+    try { await setUserBlocked(apiSession, selected.userId, false); setSelected(null); await load(); }
     catch { setSelected(null); setError('차단을 해제하지 못했어요.'); }
     finally { processing.current = false; setSaving(false); }
   }

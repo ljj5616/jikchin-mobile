@@ -18,7 +18,7 @@ export default function UserProfileScreen() {
   const { userId: rawId } = useLocalSearchParams<{ userId: string }>();
   const targetId = Number(rawId);
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const viewerId = session && !session.needProfile ? session.userId : null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,14 +30,14 @@ export default function UserProfileScreen() {
   const load = useCallback(async () => {
     const request = ++requestId.current;
     setError(null);
-    if (!token || !Number.isSafeInteger(targetId) || targetId <= 0) { setError('사용자를 찾을 수 없어요.'); return; }
+    if (!apiSession || !Number.isSafeInteger(targetId) || targetId <= 0) { setError('사용자를 찾을 수 없어요.'); return; }
     try {
-      const next = await getPublicProfile(token, targetId);
+      const next = await getPublicProfile(apiSession, targetId);
       if (request === requestId.current) setProfile(next);
     } catch (cause) {
       if (request === requestId.current) setError(cause instanceof Error ? cause.message : '프로필을 불러오지 못했어요.');
     }
-  }, [targetId, token]);
+  }, [targetId, apiSession]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -45,12 +45,12 @@ export default function UserProfileScreen() {
   }, [load]));
 
   async function changeBlock() {
-    if (!token || !profile || processing.current) return;
+    if (!apiSession || !profile || processing.current) return;
     processing.current = true;
     setSaving(true);
     setError(null);
     try {
-      await setUserBlocked(token, targetId, !profile.blocked);
+      await setUserBlocked(apiSession, targetId, !profile.blocked);
       setConfirm(false);
       await load();
     } catch { setError('차단 상태를 변경하지 못했어요.'); setConfirm(false); }

@@ -82,7 +82,7 @@ export default function CreateRoomScreen() {
         awayTeamId: awayTeamId ?? 0,
         capacity: /^\d{1,3}$/.test(capacity) ? Number(capacity) : NaN,
       }, new Date(), session.teams);
-      const room = await createRoom(session.accessToken, request);
+      const room = await createRoom(session.apiSession, request);
       router.replace({ pathname: '/room-chat/[roomId]', params: { roomId: room.id } });
     } catch (error) {
       setError(error instanceof Error ? error.message : '방을 만들지 못했어요. 다시 시도해 주세요.');

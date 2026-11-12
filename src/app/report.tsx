@@ -18,9 +18,9 @@ export default function ReportScreen() {
   const targetType: ReportTarget | null = rawType === 'USER' || rawType === 'ROOM' ? rawType : null;
   const targetId = Number(rawId);
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const viewerId = session && !session.needProfile ? session.userId : null;
-  const validTarget = !!targetType && !!token && Number.isSafeInteger(targetId) && targetId > 0;
+  const validTarget = !!targetType && !!apiSession && Number.isSafeInteger(targetId) && targetId > 0;
   const selfReport = targetType === 'USER' && targetId === viewerId;
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
@@ -35,20 +35,20 @@ export default function ReportScreen() {
 
   useEffect(() => {
     let active = true;
-    if (!targetType || !token || !validTarget || selfReport) return;
+    if (!targetType || !apiSession || !validTarget || selfReport) return;
     const targetName = targetType === 'USER'
-      ? getPublicProfile(token, targetId).then((profile) => profile.nickname ?? '알 수 없는 사용자')
-      : getRoom(token, targetId).then((room) => room.title);
-    Promise.all([targetName, getReportOptions(token, targetType)]).then(([name, options]) => {
+      ? getPublicProfile(apiSession, targetId).then((profile) => profile.nickname ?? '알 수 없는 사용자')
+      : getRoom(apiSession, targetId).then((room) => room.title);
+    Promise.all([targetName, getReportOptions(apiSession, targetType)]).then(([name, options]) => {
       if (active) setForm({ name, options });
     }).catch((cause) => {
       if (active) setError(cause instanceof Error ? cause.message : '신고 대상을 불러오지 못했어요.');
     });
     return () => { active = false; };
-  }, [targetType, targetId, token, validTarget, selfReport, loadAttempt]);
+  }, [targetType, targetId, apiSession, validTarget, selfReport, loadAttempt]);
 
   async function submit() {
-    if (!targetType || !token || !options?.enabled || saving.current) return;
+    if (!targetType || !apiSession || !options?.enabled || saving.current) return;
     if (!reason) { setError('신고 사유를 선택해 주세요.'); return; }
     const text = description.trim();
     if (options.descriptionRequired && !text) { setError('신고 내용을 입력해 주세요.'); return; }
@@ -61,7 +61,7 @@ export default function ReportScreen() {
         ? previous
         : { reason, description: text, clientReportId: uuid.v4() };
       pendingReport.current = report;
-      await submitReport(token, targetType, targetId, report);
+      await submitReport(apiSession, targetType, targetId, report);
       setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '신고를 접수하지 못했어요.');

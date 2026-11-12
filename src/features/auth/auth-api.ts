@@ -25,9 +25,15 @@ export class AuthApiError extends Error {
   }
 }
 
-type RequestOptions = { token?: string; json?: object; form?: FormData };
+type RequestOptions = {
+  token?: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  json?: object;
+  form?: FormData;
+  errorMessages?: Partial<Record<number, string>>;
+};
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
   if (!baseUrl) throw new AuthApiError('API 주소가 설정되지 않았어요. EXPO_PUBLIC_API_URL을 확인해 주세요.');
 
@@ -41,7 +47,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
-      method: json || form ? 'POST' : 'GET',
+      method: options.method ?? (json || form ? 'POST' : 'GET'),
       headers,
       body: json ? JSON.stringify(json) : form,
       signal: controller.signal,
@@ -56,6 +62,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       }
       if (response.status === 403) message = '이 계정으로 요청할 수 없어요.';
       if (response.status >= 500) message = '서버에 문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+      message = options.errorMessages?.[response.status] ?? message;
       throw new AuthApiError(`${message} (HTTP ${response.status})`, response.status);
     }
 

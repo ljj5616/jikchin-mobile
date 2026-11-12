@@ -8,18 +8,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
-import { joinMockRoom, loadMockRoomDetail, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { getRoomDetail, joinRoom } from '@/features/rooms/room-api';
 import { formatGameDate, gameDateKey } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
 
-type Detail = Awaited<ReturnType<typeof loadMockRoomDetail>>;
+type Detail = Awaited<ReturnType<typeof getRoomDetail>>;
 
 export default function RoomDetailScreen() {
   const theme = useTheme();
   const { roomId: roomParam, fromChat } = useLocalSearchParams<{ roomId: string; fromChat?: string }>();
   const roomId = Number(roomParam);
   const { session } = useMockSession();
-  const userId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
+  const token = session && !session.needProfile ? session.accessToken : null;
+  const userId = session && !session.needProfile ? session.userId : null;
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -31,34 +32,39 @@ export default function RoomDetailScreen() {
     const current = ++requestId.current;
     setDetail(null);
     setLoadError(null);
-    if (userId === null || !Number.isSafeInteger(roomId) || roomId <= 0) {
+    setActionError(null);
+    if (!token || !Number.isSafeInteger(roomId) || roomId <= 0) {
       setLoadError('방을 찾을 수 없어요.');
       return;
     }
     try {
-      const result = await loadMockRoomDetail(roomId, userId);
+      const result = await getRoomDetail(token, roomId);
       if (requestId.current === current) setDetail(result);
     } catch (error) {
       if (requestId.current === current) setLoadError(error instanceof Error ? error.message : '방 정보를 불러오지 못했어요.');
     }
-  }, [roomId, userId]);
+  }, [roomId, token]);
 
   useFocusEffect(useCallback(() => {
     void loadDetail();
     return () => { requestId.current += 1; };
   }, [loadDetail]));
 
+  const joined = detail?.participants.some((participant) => participant.userId === userId) ?? false;
+
   async function openChat() {
-    if (!detail || userId === null || joining.current) return;
+    if (!detail || !token || joining.current) return;
+    const current = requestId.current;
     joining.current = true;
     setIsJoining(true);
     setActionError(null);
     try {
-      if (!detail.joined) await joinMockRoom(roomId, userId);
-      if (fromChat === 'true' && detail.joined && router.canGoBack()) router.back();
+      if (!joined) await joinRoom(token, roomId);
+      if (requestId.current !== current) return;
+      if (fromChat === 'true' && joined && router.canGoBack()) router.back();
       else router.replace({ pathname: '/room-chat/[roomId]', params: { roomId } });
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : '방에 참여하지 못했어요.');
+      if (requestId.current === current) setActionError(error instanceof Error ? error.message : '방에 참여하지 못했어요.');
     } finally {
       joining.current = false;
       setIsJoining(false);
@@ -67,8 +73,8 @@ export default function RoomDetailScreen() {
 
   const isPast = detail ? detail.room.gameDate < gameDateKey(new Date()) : false;
   const isFull = detail ? detail.room.participantCount >= detail.room.capacity : false;
-  const cannotJoin = detail ? !detail.joined && (isPast || isFull) : true;
-  const buttonLabel = detail?.joined ? '채팅방 입장' : isPast ? '경기가 종료된 방이에요' : isFull ? '모집이 마감됐어요' : '참여하기';
+  const cannotJoin = !detail || (!joined && (isPast || isFull));
+  const buttonLabel = joined ? '채팅방 입장' : isPast ? '경기가 종료된 방이에요' : isFull ? '모집이 마감됐어요' : '참여하기';
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -79,7 +85,7 @@ export default function RoomDetailScreen() {
             <ThemedText type="smallBold" themeColor="textSecondary">‹ 뒤로</ThemedText>
           </Pressable>
           <ThemedText type="smallBold">방 상세</ThemedText>
-          {detail && detail.creatorId !== userId ? (
+          {detail ? (
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/report', params: { targetType: 'ROOM', targetId: roomId } })} style={styles.back}>
               <ThemedText type="smallBold" themeColor="textSecondary">신고</ThemedText>
             </Pressable>
@@ -89,7 +95,7 @@ export default function RoomDetailScreen() {
           <>
             <ScrollView contentContainerStyle={styles.content}>
               <View style={styles.intro}>
-                <View style={styles.badge}><ThemedText type="smallBold" style={styles.badgeText}>{detail.joined ? '참여 중' : isPast ? '경기 종료' : isFull ? '모집 마감' : '모집 중'}</ThemedText></View>
+                <View style={styles.badge}><ThemedText type="smallBold" style={styles.badgeText}>{joined ? '참여 중' : isPast ? '경기 종료' : isFull ? '모집 마감' : '모집 중'}</ThemedText></View>
                 <ThemedText accessibilityRole="header" style={styles.title}>{detail.room.title}</ThemedText>
               </View>
               <View style={[styles.matchCard, { backgroundColor: theme.backgroundElement }]}>

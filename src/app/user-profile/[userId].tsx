@@ -8,19 +8,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
-import { blockMockUser, unblockMockUser } from '@/features/moderation/mock-moderation-store';
-import { onboardingTeams, type League } from '@/features/onboarding/profile';
-import { loadMockUserProfile, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { getPublicProfile, setUserBlocked } from '@/features/moderation/moderation-api';
 import { useTheme } from '@/hooks/use-theme';
 
-type Profile = Awaited<ReturnType<typeof loadMockUserProfile>>;
+type Profile = Awaited<ReturnType<typeof getPublicProfile>>;
 
 export default function UserProfileScreen() {
   const theme = useTheme();
   const { userId: rawId } = useLocalSearchParams<{ userId: string }>();
   const targetId = Number(rawId);
   const { session } = useMockSession();
-  const viewerId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
+  const token = session && !session.needProfile ? session.accessToken : null;
+  const viewerId = session && !session.needProfile ? session.userId : null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -31,14 +30,14 @@ export default function UserProfileScreen() {
   const load = useCallback(async () => {
     const request = ++requestId.current;
     setError(null);
-    if (!viewerId || !Number.isSafeInteger(targetId) || targetId <= 0) { setError('사용자를 찾을 수 없어요.'); return; }
+    if (!token || !Number.isSafeInteger(targetId) || targetId <= 0) { setError('사용자를 찾을 수 없어요.'); return; }
     try {
-      const next = await loadMockUserProfile(targetId, viewerId);
+      const next = await getPublicProfile(token, targetId);
       if (request === requestId.current) setProfile(next);
     } catch (cause) {
       if (request === requestId.current) setError(cause instanceof Error ? cause.message : '프로필을 불러오지 못했어요.');
     }
-  }, [targetId, viewerId]);
+  }, [targetId, token]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -46,21 +45,16 @@ export default function UserProfileScreen() {
   }, [load]));
 
   async function changeBlock() {
-    if (!viewerId || !profile || processing.current) return;
+    if (!token || !profile || processing.current) return;
     processing.current = true;
     setSaving(true);
     setError(null);
     try {
-      if (profile.blocked) await unblockMockUser(viewerId, targetId);
-      else await blockMockUser(viewerId, targetId);
+      await setUserBlocked(token, targetId, !profile.blocked);
       setConfirm(false);
       await load();
     } catch { setError('차단 상태를 변경하지 못했어요.'); setConfirm(false); }
     finally { processing.current = false; setSaving(false); }
-  }
-
-  function teamName(league: League, id: number | null) {
-    return onboardingTeams[league].find((team) => team.id === id)?.name ?? '선택한 팀이 없어요';
   }
 
   return (
@@ -83,8 +77,8 @@ export default function UserProfileScreen() {
           </View>
           <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold">응원팀</ThemedText>
-            <ThemedText>KBO · {teamName('KBO', profile.favoriteKboTeamId)}</ThemedText>
-            <ThemedText>K리그1 · {teamName('KLEAGUE', profile.favoriteKleagueTeamId)}</ThemedText>
+            <ThemedText>KBO · {profile.favoriteKboTeam?.name ?? '선택한 팀이 없어요'}</ThemedText>
+            <ThemedText>K리그1 · {profile.favoriteKleagueTeam?.name ?? '선택한 팀이 없어요'}</ThemedText>
           </View>
           {targetId !== viewerId && <View style={styles.actions}>
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/report', params: { targetType: 'USER', targetId } })} style={[styles.button, { borderColor: theme.backgroundSelected }]}>

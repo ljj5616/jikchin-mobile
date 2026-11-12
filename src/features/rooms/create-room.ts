@@ -1,4 +1,4 @@
-import { onboardingTeams } from '@/features/onboarding/profile';
+import { onboardingTeams, type League, type Team } from '@/features/onboarding/profile';
 
 import { gameDateKey } from './room-list';
 
@@ -14,7 +14,7 @@ export type CreateRoomRequest = {
   capacity: number;
 };
 
-export function validateRoomRequest(request: CreateRoomRequest, today: Date) {
+export function validateRoomRequest(request: CreateRoomRequest, today: Date, availableTeams: Record<League, Team[]> = onboardingTeams) {
   const title = request.title.trim();
   const stadium = request.stadium.trim();
   if (!title || request.title.length > roomTextMaxLength) {
@@ -34,7 +34,7 @@ export function validateRoomRequest(request: CreateRoomRequest, today: Date) {
     throw new Error('경기 날짜는 오늘 또는 이후로 선택해 주세요.');
   }
 
-  const teams = Object.values(onboardingTeams).find((league) =>
+  const teams = Object.values(availableTeams).find((league) =>
     league.some((team) => team.id === request.homeTeamId),
   );
   const home = teams?.find((team) => team.id === request.homeTeamId);
@@ -48,5 +48,5 @@ export function validateRoomRequest(request: CreateRoomRequest, today: Date) {
     throw new Error(`방장 포함 ${roomCapacity.min}~${roomCapacity.max}명으로 입력해 주세요.`);
   }
 
-  return { ...request, title, stadium, homeTeam: home.name, awayTeam: away.name };
+  return { request: { ...request, title, stadium }, homeTeam: home.name, awayTeam: away.name };
 }

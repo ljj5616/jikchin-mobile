@@ -24,6 +24,7 @@ type Session = SessionBase & (
   | { needProfile: true; accessToken: string }
   | (AuthTokens & {
       needProfile: false;
+      userId: number;
       profile: CompleteProfileRequest;
       avatarUri: string | null;
     })
@@ -87,6 +88,7 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
         ...result,
         provider,
         teams,
+        userId: profile.id,
         avatarUri: profile.avatarUrl,
         profile: {
           nickname: profile.nickname,
@@ -126,8 +128,15 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
       }
       throw error;
     }
+    let account: Awaited<ReturnType<typeof getAccountProfile>>;
+    try {
+      account = await getAccountProfile(tokens.accessToken);
+    } catch {
+      void revokeSession(tokens.refreshToken).catch(() => {});
+      throw new AuthApiError('프로필은 등록됐어요. 계정 정보를 불러오려면 다시 로그인해 주세요.');
+    }
     setSession((current) => current === session
-      ? { ...session, ...tokens, needProfile: false, profile: submittedProfile, avatarUri }
+      ? { ...session, ...tokens, needProfile: false, userId: account.id, profile: submittedProfile, avatarUri }
       : current);
     return true;
   }

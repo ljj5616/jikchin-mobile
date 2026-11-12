@@ -5,7 +5,7 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
-import { listMockRooms, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { listJoinedRooms } from '@/features/rooms/room-api';
 import { RoomCard } from '@/features/rooms/room-list-screen';
 import type { RoomResponse } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
@@ -13,23 +13,23 @@ import { useTheme } from '@/hooks/use-theme';
 export function JoinedRoomsScreen({ active, onBrowseRooms }: { active: boolean; onBrowseRooms: () => void }) {
   const theme = useTheme();
   const { session } = useMockSession();
-  const userId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
+  const token = session && !session.needProfile ? session.accessToken : null;
   const [rooms, setRooms] = useState<RoomResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
   const loadRooms = useCallback(async () => {
-    if (userId === null) return;
+    if (!token) return;
     const current = ++requestId.current;
     setRooms(null);
     setError(null);
     try {
-      const result = await listMockRooms(userId);
-      if (requestId.current === current) setRooms(result.joined);
-    } catch {
-      if (requestId.current === current) setError('참여 중인 방을 불러오지 못했어요.');
+      const result = await listJoinedRooms(token);
+      if (requestId.current === current) setRooms(result);
+    } catch (error) {
+      if (requestId.current === current) setError(error instanceof Error ? error.message : '참여 중인 방을 불러오지 못했어요.');
     }
-  }, [userId]);
+  }, [token]);
 
   useFocusEffect(useCallback(() => {
     if (!active) return;

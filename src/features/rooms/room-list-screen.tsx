@@ -1,12 +1,12 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
-import { listMockRooms, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { listJoinedRooms, listRooms } from '@/features/rooms/room-api';
 import { formatGameDate, type RoomResponse } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -52,29 +52,35 @@ export function RoomCard({ room, joined, onPress, accessibilityHint = '방 상�
 export function RoomListScreen() {
   const theme = useTheme();
   const { session } = useMockSession();
-  const userId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
-  const [feed, setFeed] = useState<Awaited<ReturnType<typeof listMockRooms>> | null>(null);
+  const token = session && !session.needProfile ? session.accessToken : null;
+  const [rooms, setRooms] = useState<RoomResponse[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const requestId = useRef(0);
+
+  const loadRooms = useCallback(async () => {
+    if (!token) return;
+    const request = ++requestId.current;
+    setLoadError(null);
+    try {
+      const [upcoming, joined] = await Promise.all([listRooms(token), listJoinedRooms(token)]);
+      const joinedIds = new Set(joined.map((room) => room.id));
+      if (requestId.current === request) {
+        setRooms(upcoming.filter((room) => room.participantCount < room.capacity && !joinedIds.has(room.id)));
+      }
+    } catch (error) {
+      if (requestId.current === request) setLoadError(error instanceof Error ? error.message : '방 목록을 불러오지 못했어요.');
+    }
+  }, [token]);
 
   useFocusEffect(useCallback(() => {
-    if (userId === null) return;
-    let active = true;
-
-    listMockRooms(userId).then((rooms) => {
-      if (!active) return;
-      setFeed(rooms);
-      setLoadError(null);
-    }).catch(() => {
-      if (active) setLoadError('방 목록을 불러오지 못했어요.');
-    });
-
-    return () => { active = false; };
-  }, [userId]));
+    void loadRooms();
+    return () => { requestId.current += 1; };
+  }, [loadRooms]));
 
   if (!session || session.needProfile) return null;
 
-  const sections = feed ? [
-    { key: 'recruiting', title: '모집 중인 방', joined: false, data: feed.recruiting },
+  const sections = rooms ? [
+    { key: 'recruiting', title: '모집 중인 방', joined: false, data: rooms },
   ] : [];
 
   return (
@@ -128,13 +134,17 @@ export function RoomListScreen() {
               <ThemedText themeColor="textSecondary">같이 볼 경기를 찾아보세요.</ThemedText>
             </View>
 
-            <ThemedText type="small" themeColor="textSecondary">개발용 방 목록</ThemedText>
             {loadError && (
-              <ThemedText accessibilityRole="alert" type="small">{loadError}</ThemedText>
+              <View>
+                <ThemedText accessibilityRole="alert" type="small">{loadError}</ThemedText>
+                <Pressable accessibilityRole="button" onPress={loadRooms} style={styles.button}>
+                  <ThemedText type="smallBold">다시 시도</ThemedText>
+                </Pressable>
+              </View>
             )}
           </View>
         }
-        ListEmptyComponent={loadError || feed ? undefined : (
+        ListEmptyComponent={loadError || rooms ? undefined : (
           <ThemedText themeColor="textSecondary">방 목록을 불러오는 중이에요.</ThemedText>
         )}
       />

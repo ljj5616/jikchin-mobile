@@ -177,11 +177,11 @@ export async function loadMockUserProfile(targetId: number, viewerId: number) {
 export function createMockRoom(userId: number, request: CreateRoomRequest) {
   return writeState((state) => {
     const today = new Date();
-    const details = validateRoomRequest(request, today);
+    const { request: details, homeTeam, awayTeam } = validateRoomRequest(request, today);
     const rooms = roomsWithCounts(state, today);
     const id = rooms.reduce((max, room) => Math.max(max, room.id), state.lastRoomId) + 1;
     const chatThreadId = rooms.reduce((max, room) => Math.max(max, room.chatThreadId), state.lastChatThreadId) + 1;
-    const room = { ...details, id, chatThreadId, hostId: userId, creatorId: userId };
+    const room = { ...details, homeTeam, awayTeam, id, chatThreadId, hostId: userId, creatorId: userId };
     state.createdRooms.push(room);
     state.members[id] = [{ userId, afterMessageId: 0, joinedAt: new Date().toISOString() }];
     state.lastRoomId = id;

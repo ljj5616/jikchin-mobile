@@ -1,3 +1,4 @@
+import { uuid } from 'expo';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -21,14 +22,12 @@ import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
 import {
   chatBodyMaxLength,
-  leaveMockRoom,
-  loadMockRoomChat,
-  loadMockRoomDetail,
-  mockRoomUserIds,
-  sendMockRoomMessage,
+  getRoomChat,
+  getRoomMessages,
+  sendRoomMessage,
   type ChatMessageResponse,
-  type RoomParticipant,
-} from '@/features/rooms/mock-room-store';
+} from '@/features/rooms/room-chat-api';
+import { getRoomDetail, leaveRoom as leaveRoomRequest, type RoomParticipant } from '@/features/rooms/room-api';
 import { formatGameDate } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -56,52 +55,87 @@ export default function RoomChatScreen() {
   const { roomId: roomParam } = useLocalSearchParams<{ roomId: string }>();
   const roomId = Number(roomParam);
   const { session } = useMockSession();
-  const userId = session && !session.needProfile ? mockRoomUserIds[session.provider] : null;
-  const [chat, setChat] = useState<Awaited<ReturnType<typeof loadMockRoomChat>> | null>(null);
+  const token = session && !session.needProfile ? session.accessToken : null;
+  const userId = session && !session.needProfile ? session.userId : null;
+  const [chat, setChat] = useState<Awaited<ReturnType<typeof getRoomChat>> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [participants, setParticipants] = useState<RoomParticipant[] | null>(null);
-  const [creatorId, setCreatorId] = useState<number | null>(null);
   const [participantsError, setParticipantsError] = useState<string | null>(null);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [isLeaving, setIsLeaving] = useState(false);
   const sending = useRef(false);
+  const pendingMessage = useRef<{ body: string; id: string } | null>(null);
   const leaving = useRef(false);
+  const chatRequest = useRef(0);
+  const loadingOlder = useRef(false);
   const participantsRequest = useRef(0);
   const [menuPosition] = useState(() => new Animated.Value(400));
-  const messageList = useRef<FlatList<ChatMessageResponse>>(null);
+
+  const loadChat = useCallback(async () => {
+    const request = ++chatRequest.current;
+    setChat(null);
+    setLoadError(null);
+    setHistoryError(null);
+    if (!token || !Number.isSafeInteger(roomId) || roomId <= 0) {
+      setLoadError('방을 찾을 수 없어요.');
+      return;
+    }
+    try {
+      const result = await getRoomChat(token, roomId);
+      if (chatRequest.current === request) setChat({ ...result, messages: result.messages.reverse() });
+    } catch (error) {
+      if (chatRequest.current === request) {
+        setChat(null);
+        setLoadError(error instanceof Error ? error.message : '채팅방을 불러오지 못했어요.');
+      }
+    }
+  }, [roomId, token]);
 
   useFocusEffect(useCallback(() => {
-    if (userId === null) return;
-    let active = true;
+    void loadChat();
+    return () => { chatRequest.current += 1; participantsRequest.current += 1; };
+  }, [loadChat]));
 
-    loadMockRoomChat(roomId, userId).then((result) => {
-      if (!active) return;
-      setChat(result);
-      setLoadError(null);
-    }).catch((error) => {
-      if (!active) return;
-      setChat(null);
-      setLoadError(error instanceof Error ? error.message : '채팅방을 불러오지 못했어요.');
-    });
-
-    return () => { active = false; participantsRequest.current += 1; };
-  }, [roomId, userId]));
+  async function loadOlderMessages() {
+    if (!token || !chat?.hasMore || chat.nextBeforeId === null || loadingOlder.current) return;
+    const request = chatRequest.current;
+    loadingOlder.current = true;
+    setIsLoadingOlder(true);
+    setHistoryError(null);
+    try {
+      const page = await getRoomMessages(token, roomId, chat.nextBeforeId);
+      if (chatRequest.current === request) {
+        const older = page.messages.reverse();
+        setChat((current) => current ? { ...current, ...page, messages: [...current.messages, ...older] } : current);
+      }
+    } catch (error) {
+      if (chatRequest.current === request) setHistoryError(error instanceof Error ? error.message : '이전 메시지를 불러오지 못했어요.');
+    } finally {
+      loadingOlder.current = false;
+      setIsLoadingOlder(false);
+    }
+  }
 
   async function loadParticipants() {
-    if (userId === null) return;
+    if (!token) return;
     const request = ++participantsRequest.current;
     setParticipants(null);
     setParticipantsError(null);
     try {
-      const result = await loadMockRoomDetail(roomId, userId);
-      if (request === participantsRequest.current) { setParticipants(result.participants); setCreatorId(result.creatorId); }
-    } catch {
-      if (request === participantsRequest.current) setParticipantsError('참여자를 불러오지 못했어요.');
+      const result = await getRoomDetail(token, roomId);
+      if (request === participantsRequest.current) {
+        setParticipants(result.participants);
+        setChat((current) => current ? { ...current, room: result.room } : current);
+      }
+    } catch (error) {
+      if (request === participantsRequest.current) setParticipantsError(error instanceof Error ? error.message : '참여자를 불러오지 못했어요.');
     }
   }
 
@@ -121,14 +155,21 @@ export default function RoomChatScreen() {
   }
 
   async function sendMessage() {
-    if (!session || session.needProfile || userId === null || !chat || !body.trim() || sending.current || leaving.current) return;
+    const text = body.trim();
+    if (!token || !chat || !text || sending.current || leaving.current) return;
     sending.current = true;
     setIsSending(true);
     setSendError(null);
 
     try {
-      const message = await sendMockRoomMessage(roomId, { id: userId, nickname: session.profile.nickname }, body);
-      setChat((current) => current ? { ...current, messages: [...current.messages, message] } : current);
+      const draft = pendingMessage.current?.body === text ? pendingMessage.current : { body: text, id: uuid.v4() };
+      pendingMessage.current = draft;
+      const message = await sendRoomMessage(token, roomId, draft.body, draft.id);
+      setChat((current) => {
+        if (!current || current.messages.some((item) => item.id === message.id)) return current;
+        return { ...current, messages: [message, ...current.messages].sort((a, b) => b.id - a.id) };
+      });
+      pendingMessage.current = null;
       setBody('');
     } catch (error) {
       setSendError(error instanceof Error ? error.message : '메시지를 보내지 못했어요.');
@@ -149,13 +190,15 @@ export default function RoomChatScreen() {
   }
 
   async function leaveRoom() {
-    if (userId === null || leaving.current || sending.current) return;
+    if (!token || leaving.current || sending.current) return;
     leaving.current = true;
     setIsLeaving(true);
     setLeaveError(null);
 
     try {
-      await leaveMockRoom(roomId, userId);
+      await leaveRoomRequest(token, roomId);
+      chatRequest.current += 1;
+      participantsRequest.current += 1;
       setShowLeaveDialog(false);
       setShowMenu(false);
       setChat(null);
@@ -168,7 +211,7 @@ export default function RoomChatScreen() {
     }
   }
 
-  const canSend = !isSending && body.trim().length > 0;
+  const canSend = !isSending && !isLeaving && body.trim().length > 0;
   let leaveDescription = '다시 참여하면 그때부터 새 메시지를 볼 수 있어요.';
   if (chat?.room.participantCount === 1) {
     leaveDescription = '마지막 참여자가 나가면 이 방과 대화가 삭제돼요.';
@@ -222,14 +265,21 @@ export default function RoomChatScreen() {
         {chat ? (
           <>
             <FlatList
-              ref={messageList}
               data={chat.messages}
+              inverted
               keyExtractor={(message) => String(message.id)}
               renderItem={({ item }) => <MessageBubble message={item} own={item.senderId === userId}
                 onPressSender={() => router.push({ pathname: '/user-profile/[userId]', params: { userId: item.senderId } })} />}
               contentContainerStyle={styles.messages}
               keyboardShouldPersistTaps="handled"
-              onContentSizeChange={() => messageList.current?.scrollToEnd({ animated: false })}
+              ListFooterComponent={chat.hasMore ? (
+                <View style={styles.participantsMessage}>
+                  {historyError && <ThemedText accessibilityRole="alert" type="small">{historyError}</ThemedText>}
+                  <Pressable accessibilityRole="button" disabled={isLoadingOlder} onPress={loadOlderMessages} style={styles.retryButton}>
+                    <ThemedText type="smallBold">{isLoadingOlder ? '불러오는 중' : '이전 메시지 더 보기'}</ThemedText>
+                  </Pressable>
+                </View>
+              ) : undefined}
               ListEmptyComponent={
                 <ThemedText themeColor="textSecondary" style={styles.empty}>
                   첫 인사를 남겨보세요.
@@ -261,9 +311,16 @@ export default function RoomChatScreen() {
             </View>
           </>
         ) : (
-          <ThemedText accessibilityLiveRegion="polite" themeColor="textSecondary" style={styles.empty}>
-            {loadError ?? '채팅방을 불러오는 중이에요.'}
-          </ThemedText>
+          <View style={styles.empty}>
+            <ThemedText accessibilityLiveRegion="polite" themeColor="textSecondary">
+              {loadError ?? '채팅방을 불러오는 중이에요.'}
+            </ThemedText>
+            {loadError && (
+              <Pressable accessibilityRole="button" onPress={loadChat} style={styles.retryButton}>
+                <ThemedText type="smallBold">다시 시도</ThemedText>
+              </Pressable>
+            )}
+          </View>
         )}
       </KeyboardAvoidingView>
 
@@ -315,16 +372,22 @@ export default function RoomChatScreen() {
                 )}
               />
               <View style={[styles.drawerActions, { borderColor: theme.backgroundSelected }]}>
+                <Pressable accessibilityRole="button" disabled={isSending || isLeaving} onPress={() => {
+                  closeMenu();
+                  void loadChat();
+                }} style={styles.drawerAction}>
+                  <ThemedText type="smallBold">대화 새로고침</ThemedText>
+                </Pressable>
                 <Pressable accessibilityRole="button" onPress={openLeaveDialog} disabled={isSending || isLeaving}
                   style={[styles.drawerAction, (isSending || isLeaving) && styles.disabled]}>
                   <ThemedText type="smallBold" style={styles.leaveText}>방 나가기</ThemedText>
                 </Pressable>
-                {creatorId !== null && creatorId !== userId && <Pressable accessibilityRole="button" onPress={() => {
+                <Pressable accessibilityRole="button" disabled={isSending || isLeaving} onPress={() => {
                   closeMenu();
                   router.push({ pathname: '/report', params: { targetType: 'ROOM', targetId: roomId } });
                 }} style={styles.drawerAction}>
                   <ThemedText type="smallBold">방 신고</ThemedText>
-                </Pressable>}
+                </Pressable>
               </View>
             </SafeAreaView>
           </Animated.View>

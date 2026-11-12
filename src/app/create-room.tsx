@@ -18,8 +18,8 @@ import { Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
 import type { League } from '@/features/onboarding/profile';
 import { TeamField } from '@/features/onboarding/team-field';
-import { roomCapacity, roomTextMaxLength } from '@/features/rooms/create-room';
-import { createMockRoom, mockRoomUserIds } from '@/features/rooms/mock-room-store';
+import { roomCapacity, roomTextMaxLength, validateRoomRequest } from '@/features/rooms/create-room';
+import { createRoom } from '@/features/rooms/room-api';
 import { gameDateKey } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -74,14 +74,15 @@ export default function CreateRoomScreen() {
     setError(null);
 
     try {
-      const room = await createMockRoom(mockRoomUserIds[session.provider], {
+      const { request } = validateRoomRequest({
         title,
         gameDate: gameDate.trim(),
         stadium,
         homeTeamId: homeTeamId ?? 0,
         awayTeamId: awayTeamId ?? 0,
         capacity: /^\d{1,3}$/.test(capacity) ? Number(capacity) : NaN,
-      });
+      }, new Date(), session.teams);
+      const room = await createRoom(session.accessToken, request);
       router.replace({ pathname: '/room-chat/[roomId]', params: { roomId: room.id } });
     } catch (error) {
       setError(error instanceof Error ? error.message : '방을 만들지 못했어요. 다시 시도해 주세요.');
@@ -157,6 +158,7 @@ export default function CreateRoomScreen() {
           </View>
           <TeamField
             league={league}
+            teams={session?.teams[league] ?? []}
             label="홈 팀"
             required
             value={homeTeamId}
@@ -169,6 +171,7 @@ export default function CreateRoomScreen() {
           />
           <TeamField
             league={league}
+            teams={session?.teams[league] ?? []}
             label="원정 팀"
             required
             value={awayTeamId}

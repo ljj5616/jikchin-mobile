@@ -96,8 +96,7 @@ export function MyPage() {
       <View style={styles.overlay}>
         <View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: theme.background }]}>
           <ThemedText accessibilityRole="header" style={styles.cardTitle}>회원 탈퇴할까요?</ThemedText>
-          <ThemedText themeColor="textSecondary">프로필과 차단 정보가 삭제되고 참여 중인 방에서 나가게 돼요. 남은 방의 대화는 탈퇴한 회원으로 표시돼요.</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">현재는 이 기기의 임시 계정만 삭제돼요. 실제 서버 계정 탈퇴는 연결되어 있지 않아요.</ThemedText>
+          <ThemedText themeColor="textSecondary">이 기기에 저장된 임시 계정 정보를 삭제하고 로그아웃해요.</ThemedText>
           {withdrawError && <ThemedText accessibilityRole="alert" type="small">{withdrawError}</ThemedText>}
           <View style={styles.dialogActions}>
             <Pressable accessibilityRole="button" disabled={withdrawing} onPress={() => setShowWithdraw(false)}

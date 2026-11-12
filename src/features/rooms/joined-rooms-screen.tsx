@@ -13,23 +13,23 @@ import { useTheme } from '@/hooks/use-theme';
 export function JoinedRoomsScreen({ active, onBrowseRooms }: { active: boolean; onBrowseRooms: () => void }) {
   const theme = useTheme();
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const [rooms, setRooms] = useState<RoomResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
   const loadRooms = useCallback(async () => {
-    if (!token) return;
+    if (!apiSession) return;
     const current = ++requestId.current;
     setRooms(null);
     setError(null);
     try {
-      const result = await listJoinedRooms(token);
+      const result = await listJoinedRooms(apiSession);
       if (requestId.current === current) setRooms(result);
     } catch (error) {
       if (requestId.current === current) setError(error instanceof Error ? error.message : '참여 중인 방을 불러오지 못했어요.');
     }
-  }, [token]);
+  }, [apiSession]);
 
   useFocusEffect(useCallback(() => {
     if (!active) return;

@@ -1,4 +1,4 @@
-import { request } from '@/features/auth/auth-api';
+import type { AuthenticatedSession } from '@/features/auth/auth-api';
 import type { Team } from '@/features/onboarding/profile';
 
 export type ReportTarget = 'USER' | 'ROOM';
@@ -25,34 +25,32 @@ type PublicProfile = {
   blocked: boolean;
 };
 
-export function getPublicProfile(token: string, userId: number) {
-  return request<PublicProfile>(`/users/${userId}/profile`, {
-    token,
+export function getPublicProfile(session: AuthenticatedSession, userId: number) {
+  return session.request<PublicProfile>(`/users/${userId}/profile`, {
     errorMessages: { 404: '사용자를 찾을 수 없어요.' },
   });
 }
 
-export function listBlockedUsers(token: string) {
-  return request<BlockedUser[]>('/users/me/blocks', { token });
+export function listBlockedUsers(session: AuthenticatedSession) {
+  return session.request<BlockedUser[]>('/users/me/blocks');
 }
 
-export function setUserBlocked(token: string, userId: number, blocked: boolean) {
-  return request<void>(`/users/me/blocks/${userId}`, { token, method: blocked ? 'PUT' : 'DELETE' });
+export function setUserBlocked(session: AuthenticatedSession, userId: number, blocked: boolean) {
+  return session.request<void>(`/users/me/blocks/${userId}`, { method: blocked ? 'PUT' : 'DELETE' });
 }
 
-export function getReportOptions(token: string, targetType: ReportTarget) {
-  return request<ReportOptions>(`/api/reports/reasons?targetType=${targetType}`, { token });
+export function getReportOptions(session: AuthenticatedSession, targetType: ReportTarget) {
+  return session.request<ReportOptions>(`/api/reports/reasons?targetType=${targetType}`);
 }
 
 export function submitReport(
-  token: string,
+  session: AuthenticatedSession,
   targetType: ReportTarget,
   targetId: number,
   report: { reason: string; description: string; clientReportId: string },
 ) {
   const targets = targetType === 'ROOM' ? 'rooms' : 'users';
-  return request<unknown>(`/api/reports/${targets}/${targetId}`, {
-    token,
+  return session.request<unknown>(`/api/reports/${targets}/${targetId}`, {
     json: report,
     errorMessages: {
       400: targetType === 'ROOM'

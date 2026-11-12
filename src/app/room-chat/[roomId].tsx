@@ -55,7 +55,7 @@ export default function RoomChatScreen() {
   const { roomId: roomParam } = useLocalSearchParams<{ roomId: string }>();
   const roomId = Number(roomParam);
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const userId = session && !session.needProfile ? session.userId : null;
   const [chat, setChat] = useState<Awaited<ReturnType<typeof getRoomChat>> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -83,12 +83,12 @@ export default function RoomChatScreen() {
     setChat(null);
     setLoadError(null);
     setHistoryError(null);
-    if (!token || !Number.isSafeInteger(roomId) || roomId <= 0) {
+    if (!apiSession || !Number.isSafeInteger(roomId) || roomId <= 0) {
       setLoadError('방을 찾을 수 없어요.');
       return;
     }
     try {
-      const result = await getRoomChat(token, roomId);
+      const result = await getRoomChat(apiSession, roomId);
       if (chatRequest.current === request) setChat({ ...result, messages: result.messages.reverse() });
     } catch (error) {
       if (chatRequest.current === request) {
@@ -96,7 +96,7 @@ export default function RoomChatScreen() {
         setLoadError(error instanceof Error ? error.message : '채팅방을 불러오지 못했어요.');
       }
     }
-  }, [roomId, token]);
+  }, [roomId, apiSession]);
 
   useFocusEffect(useCallback(() => {
     void loadChat();
@@ -104,13 +104,13 @@ export default function RoomChatScreen() {
   }, [loadChat]));
 
   async function loadOlderMessages() {
-    if (!token || !chat?.hasMore || chat.nextBeforeId === null || loadingOlder.current) return;
+    if (!apiSession || !chat?.hasMore || chat.nextBeforeId === null || loadingOlder.current) return;
     const request = chatRequest.current;
     loadingOlder.current = true;
     setIsLoadingOlder(true);
     setHistoryError(null);
     try {
-      const page = await getRoomMessages(token, roomId, chat.nextBeforeId);
+      const page = await getRoomMessages(apiSession, roomId, chat.nextBeforeId);
       if (chatRequest.current === request) {
         const older = page.messages.reverse();
         setChat((current) => current ? { ...current, ...page, messages: [...current.messages, ...older] } : current);
@@ -124,12 +124,12 @@ export default function RoomChatScreen() {
   }
 
   async function loadParticipants() {
-    if (!token) return;
+    if (!apiSession) return;
     const request = ++participantsRequest.current;
     setParticipants(null);
     setParticipantsError(null);
     try {
-      const result = await getRoomDetail(token, roomId);
+      const result = await getRoomDetail(apiSession, roomId);
       if (request === participantsRequest.current) {
         setParticipants(result.participants);
         setChat((current) => current ? { ...current, room: result.room } : current);
@@ -156,7 +156,7 @@ export default function RoomChatScreen() {
 
   async function sendMessage() {
     const text = body.trim();
-    if (!token || !chat || !text || sending.current || leaving.current) return;
+    if (!apiSession || !chat || !text || sending.current || leaving.current) return;
     sending.current = true;
     setIsSending(true);
     setSendError(null);
@@ -164,7 +164,7 @@ export default function RoomChatScreen() {
     try {
       const draft = pendingMessage.current?.body === text ? pendingMessage.current : { body: text, id: uuid.v4() };
       pendingMessage.current = draft;
-      const message = await sendRoomMessage(token, roomId, draft.body, draft.id);
+      const message = await sendRoomMessage(apiSession, roomId, draft.body, draft.id);
       setChat((current) => {
         if (!current || current.messages.some((item) => item.id === message.id)) return current;
         return { ...current, messages: [message, ...current.messages].sort((a, b) => b.id - a.id) };
@@ -190,13 +190,13 @@ export default function RoomChatScreen() {
   }
 
   async function leaveRoom() {
-    if (!token || leaving.current || sending.current) return;
+    if (!apiSession || leaving.current || sending.current) return;
     leaving.current = true;
     setIsLeaving(true);
     setLeaveError(null);
 
     try {
-      await leaveRoomRequest(token, roomId);
+      await leaveRoomRequest(apiSession, roomId);
       chatRequest.current += 1;
       participantsRequest.current += 1;
       setShowLeaveDialog(false);

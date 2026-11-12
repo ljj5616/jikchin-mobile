@@ -52,17 +52,17 @@ export function RoomCard({ room, joined, onPress, accessibilityHint = '방 상�
 export function RoomListScreen() {
   const theme = useTheme();
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const [rooms, setRooms] = useState<RoomResponse[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const requestId = useRef(0);
 
   const loadRooms = useCallback(async () => {
-    if (!token) return;
+    if (!apiSession) return;
     const request = ++requestId.current;
     setLoadError(null);
     try {
-      const [upcoming, joined] = await Promise.all([listRooms(token), listJoinedRooms(token)]);
+      const [upcoming, joined] = await Promise.all([listRooms(apiSession), listJoinedRooms(apiSession)]);
       const joinedIds = new Set(joined.map((room) => room.id));
       if (requestId.current === request) {
         setRooms(upcoming.filter((room) => room.participantCount < room.capacity && !joinedIds.has(room.id)));
@@ -70,7 +70,7 @@ export function RoomListScreen() {
     } catch (error) {
       if (requestId.current === request) setLoadError(error instanceof Error ? error.message : '방 목록을 불러오지 못했어요.');
     }
-  }, [token]);
+  }, [apiSession]);
 
   useFocusEffect(useCallback(() => {
     void loadRooms();

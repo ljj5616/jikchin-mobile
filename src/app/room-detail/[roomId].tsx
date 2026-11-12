@@ -19,7 +19,7 @@ export default function RoomDetailScreen() {
   const { roomId: roomParam, fromChat } = useLocalSearchParams<{ roomId: string; fromChat?: string }>();
   const roomId = Number(roomParam);
   const { session } = useMockSession();
-  const token = session && !session.needProfile ? session.accessToken : null;
+  const apiSession = session && !session.needProfile ? session.apiSession : null;
   const userId = session && !session.needProfile ? session.userId : null;
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -33,17 +33,17 @@ export default function RoomDetailScreen() {
     setDetail(null);
     setLoadError(null);
     setActionError(null);
-    if (!token || !Number.isSafeInteger(roomId) || roomId <= 0) {
+    if (!apiSession || !Number.isSafeInteger(roomId) || roomId <= 0) {
       setLoadError('방을 찾을 수 없어요.');
       return;
     }
     try {
-      const result = await getRoomDetail(token, roomId);
+      const result = await getRoomDetail(apiSession, roomId);
       if (requestId.current === current) setDetail(result);
     } catch (error) {
       if (requestId.current === current) setLoadError(error instanceof Error ? error.message : '방 정보를 불러오지 못했어요.');
     }
-  }, [roomId, token]);
+  }, [roomId, apiSession]);
 
   useFocusEffect(useCallback(() => {
     void loadDetail();
@@ -53,13 +53,13 @@ export default function RoomDetailScreen() {
   const joined = detail?.participants.some((participant) => participant.userId === userId) ?? false;
 
   async function openChat() {
-    if (!detail || !token || joining.current) return;
+    if (!detail || !apiSession || joining.current) return;
     const current = requestId.current;
     joining.current = true;
     setIsJoining(true);
     setActionError(null);
     try {
-      if (!joined) await joinRoom(token, roomId);
+      if (!joined) await joinRoom(apiSession, roomId);
       if (requestId.current !== current) return;
       if (fromChat === 'true' && joined && router.canGoBack()) router.back();
       else router.replace({ pathname: '/room-chat/[roomId]', params: { roomId } });

@@ -83,7 +83,7 @@ export default function EditProfileScreen() {
       let avatarKey = photo === null ? null : current.profile.avatarKey;
       if (photo) {
         if (uploadedAvatar.current?.photo !== photo) {
-          const upload = await uploadAccountAvatar(current.accessToken, photo);
+          const upload = await uploadAccountAvatar(current.apiSession, photo);
           uploadedAvatar.current = { photo, key: upload.avatarKey };
         }
         avatarKey = uploadedAvatar.current.key;

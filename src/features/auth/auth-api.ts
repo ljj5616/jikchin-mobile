@@ -8,9 +8,12 @@ type LoginResponse =
   | { needProfile: true; accessToken: string; refreshToken: null }
   | ({ needProfile: false } & AuthTokens);
 
-export type AccountProfile = {
+type AccountIdentity = {
   id: number;
   nickname: string;
+};
+
+export type AccountProfile = AccountIdentity & {
   avatarKey: string | null;
   avatarUrl: string | null;
   bio: string | null;
@@ -100,6 +103,12 @@ export async function loginWithProvider(provider: SocialProvider, providerToken:
     return { needProfile: false, accessToken: result.accessToken, refreshToken: result.refreshToken };
   }
   throw new AuthApiError('서버 로그인 응답에 필요한 정보가 없어요.');
+}
+
+export function getCurrentUser(token: string) {
+  return request<AccountIdentity>('/users/me', {
+    token, errorMessages: { 404: '내 계정 정보를 찾을 수 없어요.' },
+  });
 }
 
 export function getAccountProfile(token: string, signal?: AbortSignal) {

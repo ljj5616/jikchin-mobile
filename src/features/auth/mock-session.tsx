@@ -10,6 +10,7 @@ import {
   completeAccountProfile,
   getAccountProfile,
   getAccountTeams,
+  getCurrentUser,
   loginWithProvider,
   revokeSession,
   updateAccountProfile,
@@ -65,6 +66,11 @@ export async function getMockProfileSummaries(): Promise<Partial<Record<SocialPr
   return summaries;
 }
 
+async function loadAccount(token: string): Promise<AccountProfile> {
+  const [account, profile] = await Promise.all([getCurrentUser(token), getAccountProfile(token)]);
+  return { ...profile, id: account.id, nickname: account.nickname };
+}
+
 export function MockSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const profileToken = session?.needProfile === false ? session.accessToken : null;
@@ -91,7 +97,7 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
       }
 
       const [profile, teams] = await Promise.all([
-        getAccountProfile(result.accessToken),
+        loadAccount(result.accessToken),
         getAccountTeams(result.accessToken),
       ]);
       setSession({
@@ -131,9 +137,9 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
       }
       throw error;
     }
-    let account: Awaited<ReturnType<typeof getAccountProfile>>;
+    let account: AccountProfile;
     try {
-      account = await getAccountProfile(tokens.accessToken);
+      account = await loadAccount(tokens.accessToken);
     } catch {
       void revokeSession(tokens.refreshToken).catch(() => {});
       throw new AuthApiError('프로필은 등록됐어요. 계정 정보를 불러오려면 다시 로그인해 주세요.');

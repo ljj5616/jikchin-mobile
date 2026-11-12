@@ -69,8 +69,8 @@ export async function getMockProfileSummaries(): Promise<Partial<Record<SocialPr
   return summaries;
 }
 
-async function loadAccount(token: string): Promise<AccountProfile> {
-  const [account, profile] = await Promise.all([getCurrentUser(token), getAccountProfile(token)]);
+async function loadAccount(session: AuthenticatedSession): Promise<AccountProfile> {
+  const [account, profile] = await Promise.all([getCurrentUser(session), getAccountProfile(session)]);
   return { ...profile, id: account.id, nickname: account.nickname };
 }
 
@@ -125,10 +125,10 @@ export function MockSessionProvider({ children }: PropsWithChildren) {
     const accountSession = new AuthenticatedSession(result, endSession);
     try {
       await confirmSessionStatus(accountSession, false);
-const [profile, teams] = await Promise.all([
-  loadAccount(accountSession),
-  getAccountTeams(accountSession),
-]);
+      const [profile, teams] = await Promise.all([
+        loadAccount(accountSession),
+        getAccountTeams(accountSession),
+      ]);
       setSession({
         provider,
         teams,
@@ -171,7 +171,7 @@ const [profile, teams] = await Promise.all([
     let account: AccountProfile;
     try {
       await confirmSessionStatus(accountSession, false);
-      account = await getAccountProfile(accountSession);
+      account = await loadAccount(accountSession);
     } catch {
       void accountSession.signOut().catch(() => {});
       throw new AuthApiError('프로필은 등록됐어요. 계정 정보를 불러오려면 다시 로그인해 주세요.');

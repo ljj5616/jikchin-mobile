@@ -17,9 +17,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon, Badge } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Brand, Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
+import { MatchCard } from '@/features/rooms/match-card';
 import {
   chatBodyMaxLength,
   getRoomChat,
@@ -37,12 +39,17 @@ function MessageBubble({ message, own, onPressSender }: { message: ChatMessageRe
   return (
     <View style={[styles.message, own && styles.ownMessage]}>
       {!own && message.senderId > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel={`${message.senderNickname ?? '사용자'} 프로필 보기`} onPress={onPressSender}>
-          <ThemedText type="smallBold">{message.senderNickname ?? '알 수 없는 사용자'}</ThemedText>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${message.senderNickname ?? '사용자'} 프로필 보기`} onPress={onPressSender} style={styles.sender}>
+          <View style={[styles.senderAvatar, { backgroundColor: theme.backgroundSelected }]}>
+            {message.senderAvatarUrl
+              ? <Image source={message.senderAvatarUrl} style={styles.avatarImage} contentFit="cover" />
+              : <ThemedText type="smallBold" themeColor="accentText">{(message.senderNickname ?? '?').slice(0, 1)}</ThemedText>}
+          </View>
+          <ThemedText type="smallBold" style={styles.senderName}>{message.senderNickname ?? '알 수 없는 사용자'}</ThemedText>
         </Pressable>
       )}
       {!own && message.senderId <= 0 && <ThemedText type="smallBold">탈퇴한 회원</ThemedText>}
-      <View style={[styles.bubble, { backgroundColor: own ? '#2554DB' : theme.backgroundElement }]}>
+      <View style={[styles.bubble, own && styles.ownBubble, { backgroundColor: own ? Brand.deepBlue : theme.surface, borderColor: own ? Brand.deepBlue : theme.border }]}>
         <ThemedText style={own && styles.lightText}>{message.body}</ThemedText>
       </View>
       <ThemedText type="small" themeColor="textSecondary">{message.createdAt.slice(11, 16)}</ThemedText>
@@ -225,14 +232,14 @@ export default function RoomChatScreen() {
       <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[styles.header, { borderColor: theme.backgroundSelected }]}>
+        <View style={[styles.header, { borderColor: theme.border }]}>
           <View style={styles.toolbar}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="뒤로 가기"
               onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}
               style={styles.headerAction}>
-              <ThemedText style={styles.backIcon}>‹</ThemedText>
+              <AppIcon name="back" size={24} />
             </Pressable>
             <ThemedText accessibilityRole="header" style={styles.toolbarTitle} numberOfLines={1}>
               {chat?.room.title ?? '방 채팅'}
@@ -243,22 +250,23 @@ export default function RoomChatScreen() {
                 accessibilityLabel="채팅방 메뉴 열기"
                 onPress={openMenu}
                 style={styles.headerAction}>
-                <View style={styles.menuIcon}>
-                  <View style={[styles.menuLine, { backgroundColor: theme.text }]} />
-                  <View style={[styles.menuLine, { backgroundColor: theme.text }]} />
-                  <View style={[styles.menuLine, { backgroundColor: theme.text }]} />
-                </View>
+                <AppIcon name="more" size={24} />
               </Pressable>
             )}
             {!chat && <View style={styles.headerAction} />}
           </View>
           {chat && (
-            <>
-              <ThemedText type="small">{chat.room.homeTeam} vs {chat.room.awayTeam}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {formatGameDate(chat.room.gameDate)} · {chat.room.stadium} · {chat.room.participantCount}/{chat.room.capacity}명
-              </ThemedText>
-            </>
+            <Pressable accessibilityRole="button" accessibilityLabel="경기와 참여자 정보 보기" onPress={openMenu}
+              style={[styles.matchPreview, { backgroundColor: theme.backgroundElement }]}>
+              <AppIcon name="stadium" color={theme.accentText} size={22} />
+              <View style={styles.matchText}>
+                <ThemedText type="smallBold" numberOfLines={2}>{chat.room.homeTeam} vs {chat.room.awayTeam}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+                  {formatGameDate(chat.room.gameDate)} · {chat.room.stadium}
+                </ThemedText>
+              </View>
+              <AppIcon name="chevron" size={18} color={theme.accentText} />
+            </Pressable>
           )}
         </View>
 
@@ -286,8 +294,8 @@ export default function RoomChatScreen() {
                 </ThemedText>
               }
             />
-            <View style={[styles.composer, { borderColor: theme.backgroundSelected }]}>
-              {sendError && <ThemedText type="small" accessibilityRole="alert">{sendError}</ThemedText>}
+            <View style={[styles.composer, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+              {sendError && <ThemedText type="small" accessibilityRole="alert" themeColor="danger">{sendError}</ThemedText>}
               <View style={styles.composerRow}>
                 <TextInput
                   accessibilityLabel="채팅 메시지"
@@ -302,10 +310,11 @@ export default function RoomChatScreen() {
                 />
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="메시지 보내기"
                   onPress={sendMessage}
                   disabled={!canSend}
-                  style={[styles.send, !canSend && styles.disabled]}>
-                  <ThemedText type="smallBold" style={styles.lightText}>보내기</ThemedText>
+                  style={[styles.send, { backgroundColor: theme.accent }, !canSend && styles.disabled]}>
+                  <AppIcon name="send" color={Brand.white} size={22} />
                 </Pressable>
               </View>
             </View>
@@ -327,7 +336,7 @@ export default function RoomChatScreen() {
       <Modal visible={showMenu} transparent animationType="none" onRequestClose={showLeaveDialog ? cancelLeave : closeMenu}>
         <View style={styles.menuOverlay} accessibilityViewIsModal>
           <Pressable accessibilityRole="button" accessibilityLabel="메뉴 닫기" onPress={closeMenu} style={StyleSheet.absoluteFill} />
-          <Animated.View style={[styles.drawer, { backgroundColor: theme.background, transform: [{ translateX: menuPosition }] }]}>
+          <Animated.View style={[styles.drawer, { backgroundColor: theme.surface, transform: [{ translateX: menuPosition }] }]}>
             <SafeAreaView style={styles.drawerSafe}>
               <View style={styles.drawerHeader}>
                 <View style={styles.drawerTitle}>
@@ -335,29 +344,34 @@ export default function RoomChatScreen() {
                   <ThemedText accessibilityRole="header" style={styles.drawerRoomTitle} numberOfLines={2}>{chat?.room.title}</ThemedText>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="메뉴 닫기" onPress={closeMenu} style={styles.closeButton}>
-                  <ThemedText style={styles.closeIcon}>×</ThemedText>
+                  <AppIcon name="close" size={24} />
                 </Pressable>
-              </View>
-              <View style={styles.participantsHeading}>
-                <ThemedText accessibilityRole="header" type="smallBold">참여자</ThemedText>
-                <ThemedText type="smallBold" themeColor="textSecondary">{participants?.length ?? chat?.room.participantCount ?? 0}명</ThemedText>
               </View>
               <FlatList
                 data={participants ?? []}
                 keyExtractor={(participant) => String(participant.userId)}
                 style={styles.participantList}
+                ListHeaderComponent={
+                  <>
+                    {chat && <MatchCard room={chat.room} />}
+                    <View style={styles.participantsHeading}>
+                      <ThemedText accessibilityRole="header" style={styles.drawerRoomTitle}>참여자</ThemedText>
+                      {chat && <Badge label={`${participants?.length ?? chat.room.participantCount}/${chat.room.capacity}명`} />}
+                    </View>
+                  </>
+                }
                 renderItem={({ item }) => (
                   <Pressable accessibilityRole="button" accessibilityLabel={`${item.nickname ?? '사용자'} 프로필 보기`}
                     onPress={() => { closeMenu(); router.push({ pathname: '/user-profile/[userId]', params: { userId: item.userId } }); }}
-                    style={styles.participantRow}>
-                    <View style={styles.avatar}>
+                    style={[styles.participantRow, { backgroundColor: theme.backgroundElement }]}>
+                    <View style={[styles.avatar, { backgroundColor: theme.backgroundSelected }]}>
                       {item.avatarUrl ? <Image source={item.avatarUrl} style={styles.avatarImage} contentFit="cover" /> : (
-                        <ThemedText style={styles.avatarText}>{(item.nickname ?? '?').slice(0, 1)}</ThemedText>
+                        <ThemedText type="smallBold" themeColor="accentText">{(item.nickname ?? '?').slice(0, 1)}</ThemedText>
                       )}
                     </View>
                     <ThemedText style={styles.participantName} numberOfLines={1}>{item.nickname ?? '알 수 없는 사용자'}</ThemedText>
                     {item.userId === userId && <ThemedText type="small" themeColor="textSecondary">나</ThemedText>}
-                    {item.host && <View style={styles.hostBadge}><ThemedText type="smallBold" style={styles.hostText}>방장</ThemedText></View>}
+                    {item.host && <Badge label="방장" />}
                   </Pressable>
                 )}
                 ListEmptyComponent={participantsError ? (
@@ -371,29 +385,32 @@ export default function RoomChatScreen() {
                   </ThemedText>
                 )}
               />
-              <View style={[styles.drawerActions, { borderColor: theme.backgroundSelected }]}>
+              <View style={[styles.drawerActions, { borderColor: theme.border }]}>
                 <Pressable accessibilityRole="button" disabled={isSending || isLeaving} onPress={() => {
                   closeMenu();
                   void loadChat();
                 }} style={styles.drawerAction}>
-                  <ThemedText type="smallBold">대화 새로고침</ThemedText>
+                  <AppIcon name="refresh" color={theme.accentText} />
+                  <ThemedText type="smallBold" style={styles.drawerActionLabel}>새로고침</ThemedText>
                 </Pressable>
                 <Pressable accessibilityRole="button" onPress={openLeaveDialog} disabled={isSending || isLeaving}
                   style={[styles.drawerAction, (isSending || isLeaving) && styles.disabled]}>
-                  <ThemedText type="smallBold" style={styles.leaveText}>방 나가기</ThemedText>
+                  <AppIcon name="back" color={theme.danger} />
+                  <ThemedText type="smallBold" themeColor="danger" style={styles.drawerActionLabel}>방 나가기</ThemedText>
                 </Pressable>
                 <Pressable accessibilityRole="button" disabled={isSending || isLeaving} onPress={() => {
                   closeMenu();
                   router.push({ pathname: '/report', params: { targetType: 'ROOM', targetId: roomId } });
                 }} style={styles.drawerAction}>
-                  <ThemedText type="smallBold">방 신고</ThemedText>
+                  <AppIcon name="flag" color={theme.textSecondary} />
+                  <ThemedText type="smallBold" style={styles.drawerActionLabel}>방 신고</ThemedText>
                 </Pressable>
               </View>
             </SafeAreaView>
           </Animated.View>
           {showLeaveDialog && (
             <View style={styles.overlay}>
-              <View style={[styles.dialog, { backgroundColor: theme.background }]}>
+              <View style={[styles.dialog, { backgroundColor: theme.surface }]}>
                 <ThemedText accessibilityRole="header" style={styles.title}>방에서 나갈까요?</ThemedText>
                 <ThemedText themeColor="textSecondary">{leaveDescription}</ThemedText>
                 {leaveError && <ThemedText type="small" accessibilityRole="alert">{leaveError}</ThemedText>}
@@ -428,22 +445,25 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center' },
   header: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.three,
-    gap: Spacing.one,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
   headerAction: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  toolbarTitle: { flex: 1, minWidth: 0, fontSize: 20, lineHeight: 28, fontWeight: '700' },
-  backIcon: { fontSize: 38, lineHeight: 44, fontWeight: '400' },
-  menuIcon: { width: 23, gap: 5 },
-  menuLine: { height: 2, borderRadius: 1 },
+  toolbarTitle: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 26, fontWeight: '800' },
+  matchPreview: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12 },
+  matchText: { flex: 1, minWidth: 0 },
   title: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
-  messages: { flexGrow: 1, padding: Spacing.four, gap: Spacing.three },
+  messages: { flexGrow: 1, padding: 18, gap: Spacing.three },
   message: { alignSelf: 'flex-start', alignItems: 'flex-start', maxWidth: '88%', gap: Spacing.one },
   ownMessage: { alignSelf: 'flex-end', alignItems: 'flex-end' },
-  bubble: { borderRadius: 16, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+  sender: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  senderName: { flexShrink: 1 },
+  senderAvatar: { width: 30, height: 30, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  bubble: { borderWidth: 1, borderRadius: 16, borderTopLeftRadius: 5, paddingHorizontal: 14, paddingVertical: 9 },
+  ownBubble: { borderTopLeftRadius: 16, borderTopRightRadius: 5 },
   lightText: { color: '#FFFFFF' },
   empty: { padding: Spacing.four, textAlign: 'center' },
   composer: {
@@ -460,15 +480,15 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    borderRadius: 12,
+    borderRadius: 24,
     fontSize: 16,
   },
   send: {
+    width: 48,
     minHeight: 48,
-    paddingHorizontal: Spacing.three,
+    alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: '#2554DB',
+    borderRadius: 24,
   },
   disabled: { opacity: 0.5 },
   menuOverlay: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.45)' },
@@ -478,21 +498,17 @@ const styles = StyleSheet.create({
   drawerTitle: { flex: 1, gap: Spacing.one },
   drawerRoomTitle: { fontSize: 20, lineHeight: 28, fontWeight: '700' },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  closeIcon: { fontSize: 30, lineHeight: 36 },
-  participantsHeading: { flexDirection: 'row', gap: Spacing.two, paddingTop: Spacing.four, paddingBottom: Spacing.two },
+  participantsHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.four, paddingBottom: Spacing.two },
   participantList: { flex: 1 },
-  participantRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  participantRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: 8, marginBottom: 6, borderRadius: 12 },
   participantName: { flex: 1 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E6EDFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: '#2554DB', fontWeight: '700' },
-  hostBadge: { borderRadius: 8, backgroundColor: '#E6EDFF', paddingHorizontal: Spacing.two, paddingVertical: Spacing.half },
-  hostText: { color: '#2554DB' },
   participantsMessage: { paddingVertical: Spacing.three },
   retryButton: { minHeight: 44, justifyContent: 'center' },
-  drawerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.four, borderTopWidth: StyleSheet.hairlineWidth },
-  drawerAction: { minHeight: 56, justifyContent: 'center' },
-  leaveText: { color: '#A82119' },
+  drawerActions: { flexDirection: 'row', gap: 4, borderTopWidth: StyleSheet.hairlineWidth },
+  drawerAction: { flex: 1, minHeight: 60, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  drawerActionLabel: { textAlign: 'center', fontSize: 12, lineHeight: 17 },
   overlay: {
     position: 'absolute',
     top: 0,
@@ -513,5 +529,5 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: 10,
   },
-  confirmLeave: { backgroundColor: '#A82119' },
+  confirmLeave: { backgroundColor: Brand.red },
 });

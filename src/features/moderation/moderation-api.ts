@@ -14,6 +14,7 @@ type BlockedUser = {
   userId: number;
   nickname: string | null;
   avatarUrl: string;
+  blockedAt?: string;
 };
 
 type PublicProfile = {

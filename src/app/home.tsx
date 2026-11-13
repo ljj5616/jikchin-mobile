@@ -3,6 +3,7 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon, BrandMark } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
 import { useMockSession } from '@/features/auth/mock-session';
 import { MyPage } from '@/features/profile/my-page';
@@ -10,7 +11,11 @@ import { JoinedRoomsScreen } from '@/features/rooms/joined-rooms-screen';
 import { RoomListScreen } from '@/features/rooms/room-list-screen';
 import { useTheme } from '@/hooks/use-theme';
 
-const tabs = ['직관방', '참여 중인 방', '마이페이지'] as const;
+const tabs = [
+  { label: '직관방', icon: 'stadium' },
+  { label: '참여 중인 방', icon: 'chat' },
+  { label: '마이페이지', icon: 'person' },
+] as const;
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -38,6 +43,10 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
+      <View style={[styles.header, { borderColor: theme.border }]}>
+        <BrandMark />
+        <ThemedText style={styles.brand}>직친</ThemedText>
+      </View>
       <View style={styles.pagerContainer} onLayout={onLayout}>
         {width > 0 && (
           <ScrollView ref={pager} horizontal pagingEnabled bounces={false} showsHorizontalScrollIndicator={false}
@@ -48,16 +57,20 @@ export default function HomeScreen() {
           </ScrollView>
         )}
       </View>
-      <View accessibilityRole="tablist" style={[styles.tabs, { borderColor: theme.backgroundSelected }]}>
-        {tabs.map((label, index) => (
-          <Pressable key={label} accessibilityRole="tab" accessibilityState={{ selected: activeTab === index }}
-            onPress={() => changeTab(index)} style={styles.tab}>
-            <View style={[styles.tabIndicator, { backgroundColor: activeTab === index ? '#2554DB' : 'transparent' }]} />
-            <ThemedText type="smallBold" style={{ color: activeTab === index ? '#2554DB' : theme.textSecondary }}>
-              {label}
-            </ThemedText>
-          </Pressable>
-        ))}
+      <View accessibilityRole="tablist" style={[styles.tabs, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+        {tabs.map(({ label, icon }, index) => {
+          const selected = activeTab === index;
+          const color = selected ? theme.accentText : theme.textSecondary;
+          return (
+            <Pressable key={label} accessibilityRole="tab" accessibilityState={{ selected }}
+              onPress={() => changeTab(index)} style={styles.tab}>
+              <View style={[styles.tabIcon, selected && { backgroundColor: theme.backgroundElement }]}>
+                <AppIcon name={icon} color={color} size={23} />
+              </View>
+              <ThemedText style={[styles.tabLabel, { color }]}>{label}</ThemedText>
+            </Pressable>
+          );
+        })}
       </View>
     </SafeAreaView>
   );
@@ -65,8 +78,11 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  header: { minHeight: 60, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  brand: { fontSize: 22, lineHeight: 28, fontWeight: '800' },
   pagerContainer: { flex: 1 },
   tabs: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  tab: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 7 },
-  tabIndicator: { width: 24, height: 3, borderRadius: 2 },
+  tab: { flex: 1, minHeight: 64, paddingVertical: 5, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  tabIcon: { width: 50, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
+  tabLabel: { fontSize: 12, lineHeight: 17, fontWeight: '700', textAlign: 'center' },
 });

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { AppIcon } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,7 +21,9 @@ type TeamFieldProps = {
 
 export function TeamField({ league, teams = onboardingTeams[league], label, value, required = false, disabled, expanded, onToggle, onSelect }: TeamFieldProps) {
   const theme = useTheme();
-  const selectedName = teams.find((team) => team.id === value)?.name ?? (required ? '팀을 선택해 주세요' : '선택 안 함');
+  const selected = teams.find((team) => team.id === value);
+  const selectedName = selected?.name ?? (required ? '팀을 선택해 주세요' : '선택 안 함');
+  const iconColor = league === 'KBO' ? theme.accentText : theme.success;
   const options = required ? teams : [{ id: null, name: '선택 안 함' }, ...teams];
 
   return (
@@ -33,9 +36,12 @@ export function TeamField({ league, teams = onboardingTeams[league], label, valu
         accessibilityState={{ expanded }}
         disabled={disabled}
         onPress={onToggle}
-        style={[styles.selector, { borderColor: theme.backgroundSelected }]}>
+        style={[styles.selector, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
+        <View style={[styles.teamIcon, { backgroundColor: theme.surface }]}>
+          <AppIcon name={league === 'KBO' ? 'baseball' : 'football'} size={19} color={iconColor} />
+        </View>
         <ThemedText style={styles.selection}>{selectedName}</ThemedText>
-        <ThemedText type="smallBold" themeColor="textSecondary">{expanded ? '닫기' : '선택'}</ThemedText>
+        <AppIcon name={expanded ? 'close' : 'chevron'} size={17} color={iconColor} />
       </Pressable>
       {expanded && (
         <View style={styles.options}>
@@ -71,7 +77,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
   },
-  selection: { flex: 1 },
+  selection: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  teamIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   option: {
     minHeight: 44,

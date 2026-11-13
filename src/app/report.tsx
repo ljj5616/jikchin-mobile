@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon, PageHeader, ui } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Brand, Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
 import { getPublicProfile, getReportOptions, submitReport, type ReportTarget } from '@/features/moderation/moderation-api';
 import { getRoom } from '@/features/rooms/room-api';
@@ -32,6 +33,8 @@ export default function ReportScreen() {
   const saving = useRef(false);
   const pendingReport = useRef<{ reason: string; description: string; clientReportId: string } | null>(null);
   const options = form?.options;
+  const title = targetType === 'ROOM' ? '방 신고' : '사용자 신고';
+  const goBack = () => router.canGoBack() ? router.back() : router.replace('/home');
 
   useEffect(() => {
     let active = true;
@@ -73,15 +76,13 @@ export default function ReportScreen() {
       <StatusBar style="auto" />
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-          <Pressable accessibilityRole="button" onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} disabled={isSaving} style={styles.back}>
-            <ThemedText type="smallBold" themeColor="textSecondary">‹ 뒤로</ThemedText>
-          </Pressable>
-          <ThemedText accessibilityRole="header" type="subtitle">{targetType === 'ROOM' ? '방 신고' : '사용자 신고'}</ThemedText>
+          <PageHeader title={title} onBack={goBack} disabled={isSaving} />
           {saved ? (
-            <View style={styles.section}>
+            <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <AppIcon name="check" size={24} color={theme.success} />
               <ThemedText accessibilityRole="header" style={styles.sectionTitle}>신고가 접수됐어요.</ThemedText>
-              <Pressable accessibilityRole="button" onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} style={styles.primary}>
-                <ThemedText style={styles.primaryText}>확인</ThemedText>
+              <Pressable accessibilityRole="button" onPress={goBack} style={[ui.button, { backgroundColor: theme.accent }]}>
+                <ThemedText style={[ui.buttonLabel, ui.white]}>확인</ThemedText>
               </Pressable>
             </View>
           ) : (
@@ -90,25 +91,26 @@ export default function ReportScreen() {
               {!form && validTarget && !selfReport && !error && <ThemedText themeColor="textSecondary">신고 대상을 불러오는 중이에요.</ThemedText>}
               {options && !options.enabled && <ThemedText accessibilityRole="alert">신고 접수가 일시 중단됐어요.</ThemedText>}
               {options?.enabled && <>
-                <View style={styles.section}>
+                <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <ThemedText accessibilityRole="header" style={styles.sectionTitle}>신고 사유</ThemedText>
                   {options.reasons.map((item) => (
                     <Pressable key={item.code} accessibilityRole="radio" accessibilityState={{ checked: reason === item.code }}
-                      disabled={isSaving} onPress={() => { setReason(item.code); setError(null); }} style={[styles.option, { borderColor: reason === item.code ? '#2554DB' : theme.backgroundSelected }]}>
+                      disabled={isSaving} onPress={() => { setReason(item.code); setError(null); }}
+                      style={[styles.option, { backgroundColor: theme.backgroundElement, borderColor: reason === item.code ? theme.accentText : theme.border }]}>
                       <ThemedText style={styles.reasonLabel}>{item.label}</ThemedText>
-                      <ThemedText type="smallBold" style={{ color: reason === item.code ? '#2554DB' : theme.textSecondary }}>{reason === item.code ? '선택됨' : '선택'}</ThemedText>
+                      {reason === item.code && <AppIcon name="check" color={theme.accentText} size={18} />}
                     </Pressable>
                   ))}
                 </View>
-                <View style={styles.section}>
+                <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <ThemedText type="smallBold">상세 내용 ({options.descriptionRequired ? '필수' : '선택'})</ThemedText>
                   <TextInput accessibilityLabel="신고 상세 내용" multiline editable={!isSaving} value={description} onChangeText={setDescription}
                     maxLength={options.descriptionMaxLength} placeholder="상황을 자세히 알려주세요" placeholderTextColor={theme.textSecondary}
-                    style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} />
+                    style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement }]} />
                   <ThemedText type="small" themeColor="textSecondary">{description.length}/{options.descriptionMaxLength}자</ThemedText>
                 </View>
               </>}
-              {(error || !validTarget || selfReport) && <ThemedText accessibilityRole="alert" type="small">
+              {(error || !validTarget || selfReport) && <ThemedText accessibilityRole="alert" type="small" themeColor="danger">
                 {error ?? (selfReport ? '본인은 신고할 수 없어요.' : '신고 대상을 찾을 수 없어요.')}
               </ThemedText>}
               {error && !form && validTarget && !selfReport && (
@@ -116,8 +118,10 @@ export default function ReportScreen() {
                   <ThemedText type="smallBold">다시 시도</ThemedText>
                 </Pressable>
               )}
-              {options?.enabled && <Pressable accessibilityRole="button" disabled={isSaving} onPress={submit} style={[styles.primary, isSaving && styles.disabled]}>
-                <ThemedText style={styles.primaryText}>{isSaving ? '접수 중' : '신고 접수'}</ThemedText>
+              {options?.enabled && <Pressable accessibilityRole="button" disabled={isSaving} onPress={submit}
+                style={[ui.button, { backgroundColor: theme.accent }, isSaving && styles.disabled]}>
+                <AppIcon name="flag" color={Brand.white} />
+                <ThemedText style={[ui.buttonLabel, ui.white]}>{isSaving ? '접수 중' : '신고 접수'}</ThemedText>
               </Pressable>}
             </>
           )}
@@ -131,12 +135,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { width: '100%', maxWidth: 520, alignSelf: 'center', paddingHorizontal: Spacing.four, paddingBottom: Spacing.five, gap: Spacing.four },
   back: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },
-  section: { gap: Spacing.two },
+  section: { gap: Spacing.two, padding: 14 },
   sectionTitle: { fontSize: 20, lineHeight: 28, fontWeight: '700' },
   option: { minHeight: 50, paddingHorizontal: Spacing.three, borderWidth: 1, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
   reasonLabel: { flex: 1 },
   input: { minHeight: 120, textAlignVertical: 'top', padding: Spacing.three, borderWidth: 1, borderRadius: 12, fontSize: 16 },
-  primary: { minHeight: 52, borderRadius: 12, backgroundColor: '#2554DB', alignItems: 'center', justifyContent: 'center' },
-  primaryText: { color: '#FFFFFF', fontWeight: '700' },
   disabled: { opacity: 0.5 },
 });

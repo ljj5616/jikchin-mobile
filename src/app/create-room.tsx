@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon, PageHeader, ui } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Brand, Spacing } from '@/constants/theme';
 import { useMockSession } from '@/features/auth/mock-session';
 import type { League } from '@/features/onboarding/profile';
 import { TeamField } from '@/features/onboarding/team-field';
@@ -28,17 +29,20 @@ const leagues = [
   { code: 'KLEAGUE', label: 'K리그1' },
 ] as const;
 
-function RoomInput({ label, ...props }: TextInputProps & { label: string }) {
+function RoomInput({ label, hint, ...props }: TextInputProps & { label: string; hint?: string }) {
   const theme = useTheme();
 
   return (
     <View style={styles.field}>
-      <ThemedText type="smallBold">{label}</ThemedText>
+      <View style={styles.fieldHeading}>
+        <ThemedText type="smallBold">{label}</ThemedText>
+        {hint && <ThemedText type="small" themeColor="textSecondary">{hint}</ThemedText>}
+      </View>
       <TextInput
         {...props}
         accessibilityLabel={label}
         placeholderTextColor={theme.textSecondary}
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+        style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement }]}
       />
     </View>
   );
@@ -58,6 +62,14 @@ export default function CreateRoomScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saving = useRef(false);
+  const capacityValue = /^\d{1,3}$/.test(capacity) ? Number(capacity) : NaN;
+
+  function stepCapacity(delta: number) {
+    setCapacity((current) => {
+      const number = /^\d{1,3}$/.test(current) ? Number(current) : roomCapacity.min;
+      return String(Math.max(roomCapacity.min, Math.min(roomCapacity.max, number + delta)));
+    });
+  }
 
   function changeLeague(code: League) {
     if (league === code) return;
@@ -80,7 +92,7 @@ export default function CreateRoomScreen() {
         stadium,
         homeTeamId: homeTeamId ?? 0,
         awayTeamId: awayTeamId ?? 0,
-        capacity: /^\d{1,3}$/.test(capacity) ? Number(capacity) : NaN,
+        capacity: capacityValue,
       }, new Date(), session.teams);
       const room = await createRoom(session.apiSession, request);
       router.replace({ pathname: '/room-chat/[roomId]', params: { roomId: room.id } });
@@ -99,111 +111,119 @@ export default function CreateRoomScreen() {
         style={styles.screen}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+          <PageHeader title="방 생성" onBack={() => router.dismissTo('/home')} disabled={isSaving} />
           <View style={styles.field}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.dismissTo('/home')}
-              disabled={isSaving}
-              style={styles.back}>
-              <ThemedText type="smallBold" themeColor="textSecondary">방 목록</ThemedText>
-            </Pressable>
             <ThemedText accessibilityRole="header" type="subtitle" style={styles.title}>
-              방 생성
+              직관방 만들기
             </ThemedText>
             <ThemedText themeColor="textSecondary">함께 볼 경기와 모집 인원을 정해 주세요.</ThemedText>
           </View>
 
-          <RoomInput
-            label="방 제목"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={roomTextMaxLength}
-            placeholder="예) 잠실에서 야구 같이 봐요"
-          />
-          <View style={styles.field}>
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <RoomInput
-              label="경기 날짜"
-              value={gameDate}
-              onChangeText={setGameDate}
-              maxLength={10}
-              autoCorrect={false}
-              placeholder="YYYY-MM-DD"
+              label="방 제목"
+              hint={`${title.length}/${roomTextMaxLength}자`}
+              value={title}
+              onChangeText={setTitle}
+              maxLength={roomTextMaxLength}
+              placeholder="예) 잠실에서 야구 같이 봐요"
             />
-            <ThemedText type="small" themeColor="textSecondary">YYYY-MM-DD · 오늘 또는 이후</ThemedText>
           </View>
-          <RoomInput
-            label="경기장"
-            value={stadium}
-            onChangeText={setStadium}
-            maxLength={roomTextMaxLength}
-            placeholder="예) 잠실야구장"
-          />
 
-          <View style={styles.field}>
-            <ThemedText type="smallBold">리그</ThemedText>
-            <View style={styles.leagues}>
-              {leagues.map(({ code, label }) => (
-                <Pressable
-                  key={code}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: league === code }}
-                  onPress={() => changeLeague(code)}
-                  style={[styles.leagueButton, {
-                    backgroundColor: league === code ? theme.backgroundSelected : theme.backgroundElement,
-                  }]}>
-                  <ThemedText type="smallBold">{label}</ThemedText>
-                </Pressable>
-              ))}
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <ThemedText accessibilityRole="header" style={styles.sectionTitle}>경기 정보</ThemedText>
+            <View style={styles.field}>
+              <ThemedText type="smallBold">종목 / 리그</ThemedText>
+              <View style={[styles.leagues, { backgroundColor: theme.backgroundElement }]}>
+                {leagues.map(({ code, label }) => {
+                  const selected = league === code;
+                  const color = selected ? Brand.white : theme.accentText;
+                  return (
+                    <Pressable key={code} accessibilityRole="radio" accessibilityState={{ checked: selected }}
+                      onPress={() => changeLeague(code)} style={[styles.leagueButton, selected && { backgroundColor: theme.accent }]}>
+                      <AppIcon name={code === 'KBO' ? 'baseball' : 'football'} size={18} color={color} />
+                      <ThemedText type="smallBold" style={{ color }}>{label}</ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.field}>
+              <RoomInput
+                label="경기 날짜"
+                value={gameDate}
+                onChangeText={setGameDate}
+                maxLength={10}
+                autoCorrect={false}
+                placeholder="YYYY-MM-DD"
+              />
+              <ThemedText type="small" themeColor="textSecondary">YYYY-MM-DD · 오늘 또는 이후</ThemedText>
+            </View>
+            <RoomInput
+              label="경기장"
+              value={stadium}
+              onChangeText={setStadium}
+              maxLength={roomTextMaxLength}
+              placeholder="예) 잠실야구장"
+            />
+            <TeamField
+              league={league}
+              teams={session?.teams[league] ?? []}
+              label="홈 팀"
+              required
+              value={homeTeamId}
+              expanded={expandedTeam === 'home'}
+              onToggle={() => setExpandedTeam(expandedTeam === 'home' ? null : 'home')}
+              onSelect={(teamId) => {
+                setHomeTeamId(teamId);
+                setExpandedTeam(null);
+              }}
+            />
+            <TeamField
+              league={league}
+              teams={session?.teams[league] ?? []}
+              label="원정 팀"
+              required
+              value={awayTeamId}
+              expanded={expandedTeam === 'away'}
+              onToggle={() => setExpandedTeam(expandedTeam === 'away' ? null : 'away')}
+              onSelect={(teamId) => {
+                setAwayTeamId(teamId);
+                setExpandedTeam(null);
+              }}
+            />
+          </View>
+
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={styles.fieldHeading}>
+              <ThemedText accessibilityRole="header" style={styles.sectionTitle}>모집 정원</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">방장 포함 {roomCapacity.min}~{roomCapacity.max}명</ThemedText>
+            </View>
+            <View style={[styles.stepper, { backgroundColor: theme.backgroundElement }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="모집 정원 줄이기" onPress={() => stepCapacity(-1)}
+                disabled={isSaving || capacityValue <= roomCapacity.min}
+                style={[styles.stepButton, { backgroundColor: theme.surface }, capacityValue <= roomCapacity.min && styles.dimmed]}>
+                <AppIcon name="remove" color={theme.accentText} />
+              </Pressable>
+              <TextInput accessibilityLabel="모집 정원" editable={!isSaving} value={capacity} onChangeText={setCapacity}
+                inputMode="numeric" maxLength={3} style={[styles.stepInput, { color: theme.accentText }]} />
+              <Pressable accessibilityRole="button" accessibilityLabel="모집 정원 늘리기" onPress={() => stepCapacity(1)}
+                disabled={isSaving || capacityValue >= roomCapacity.max}
+                style={[styles.stepButton, { backgroundColor: theme.surface }, capacityValue >= roomCapacity.max && styles.dimmed]}>
+                <AppIcon name="add" color={theme.accentText} />
+              </Pressable>
             </View>
           </View>
-          <TeamField
-            league={league}
-            teams={session?.teams[league] ?? []}
-            label="홈 팀"
-            required
-            value={homeTeamId}
-            expanded={expandedTeam === 'home'}
-            onToggle={() => setExpandedTeam(expandedTeam === 'home' ? null : 'home')}
-            onSelect={(teamId) => {
-              setHomeTeamId(teamId);
-              setExpandedTeam(null);
-            }}
-          />
-          <TeamField
-            league={league}
-            teams={session?.teams[league] ?? []}
-            label="원정 팀"
-            required
-            value={awayTeamId}
-            expanded={expandedTeam === 'away'}
-            onToggle={() => setExpandedTeam(expandedTeam === 'away' ? null : 'away')}
-            onSelect={(teamId) => {
-              setAwayTeamId(teamId);
-              setExpandedTeam(null);
-            }}
-          />
 
           <View style={styles.field}>
-            <RoomInput
-              label="모집 정원"
-              value={capacity}
-              onChangeText={setCapacity}
-              inputMode="numeric"
-              placeholder={`${roomCapacity.min}~${roomCapacity.max}`}
-            />
-            <ThemedText type="small" themeColor="textSecondary">
-              방장 포함 {roomCapacity.min}~{roomCapacity.max}명
-            </ThemedText>
-          </View>
-
-          <View style={styles.field}>
-            {error && <ThemedText type="small" accessibilityRole="alert">{error}</ThemedText>}
+            {error && <ThemedText type="small" accessibilityRole="alert" themeColor="danger">{error}</ThemedText>}
             <Pressable
               accessibilityRole="button"
               onPress={submit}
               disabled={isSaving}
-              style={({ pressed }) => [styles.submit, (pressed || isSaving) && styles.dimmed]}>
-              <ThemedText style={styles.submitLabel}>{isSaving ? '방 생성 중' : '방 생성 완료'}</ThemedText>
+              style={({ pressed }) => [ui.button, { backgroundColor: theme.accent }, (pressed || isSaving) && styles.dimmed]}>
+              <AppIcon name="stadium" color={Brand.white} />
+              <ThemedText style={[ui.buttonLabel, ui.white]}>{isSaving ? '방 생성 중' : '직관방 개설하기'}</ThemedText>
             </Pressable>
           </View>
         </ScrollView>
@@ -218,13 +238,15 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: 480,
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: 18,
     paddingBottom: Spacing.five,
-    gap: Spacing.four,
+    gap: 16,
   },
   field: { gap: Spacing.two },
-  back: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  title: { fontWeight: '700' },
+  fieldHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  title: { fontWeight: '800' },
+  section: { gap: 14, padding: 15 },
+  sectionTitle: { fontSize: 18, lineHeight: 24, fontWeight: '800' },
   input: {
     minHeight: 48,
     paddingHorizontal: Spacing.three,
@@ -233,22 +255,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     fontSize: 16,
   },
-  leagues: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
+  leagues: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 4, borderRadius: 13 },
   leagueButton: {
     minHeight: 44,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     justifyContent: 'center',
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: 6,
     paddingVertical: Spacing.two,
     borderRadius: 12,
   },
-  submit: {
-    minHeight: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.two,
-    borderRadius: 12,
-    backgroundColor: '#2554DB',
-  },
-  submitLabel: { color: '#FFFFFF', fontWeight: '700' },
+  stepper: { flexDirection: 'row', alignItems: 'center', padding: 6, borderRadius: 13 },
+  stepButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
+  stepInput: { flex: 1, minHeight: 44, fontSize: 24, fontWeight: '800', textAlign: 'center' },
   dimmed: { opacity: 0.8 },
 });

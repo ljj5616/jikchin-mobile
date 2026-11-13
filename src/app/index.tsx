@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon, BrandMark, ui } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useMockSession, type SocialProvider } from '@/features/auth/mock-session';
@@ -10,13 +11,6 @@ import { getSocialToken } from '@/features/auth/social-sign-in';
 import { useTheme } from '@/hooks/use-theme';
 
 const loginOptions = [
-  {
-    provider: 'google',
-    label: 'Google로 계속하기',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#747775',
-    textColor: '#1F1F1F',
-  },
   {
     provider: 'kakao',
     label: '카카오 로그인',
@@ -27,14 +21,21 @@ const loginOptions = [
   {
     provider: 'naver',
     label: '네이버 로그인',
-    backgroundColor: '#03A94D',
-    borderColor: '#03A94D',
+    backgroundColor: '#00843D',
+    borderColor: '#00843D',
     textColor: '#FFFFFF',
+  },
+  {
+    provider: 'google',
+    label: 'Google로 계속하기',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE2EE',
+    textColor: '#1F1F1F',
   },
 ] as const;
 
 export default function LoginScreen() {
-  const { background } = useTheme();
+  const theme = useTheme();
   const { signIn } = useMockSession();
   const inProgress = useRef(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -58,22 +59,29 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: background }]}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.intro}>
-          <View style={styles.mark}>
-            <View style={styles.pitch}>
-              <View style={styles.halfwayLine} />
-              <View style={styles.centerCircle} />
-            </View>
-          </View>
+          <BrandMark size={80} />
           <ThemedText accessibilityRole="header" type="title" style={styles.centeredText}>
-            직관친구
+            직친
           </ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            경기장에서 함께 응원할 친구를 만나요.
+            경기장에서 함께 응원할{'\n'}직관 친구를 만나보세요.
           </ThemedText>
+        </View>
+
+        <View style={[ui.card, styles.leagues, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+          <View style={styles.league}>
+            <AppIcon name="baseball" color={theme.accentText} size={23} />
+            <ThemedText type="smallBold" themeColor="accentText">KBO 야구</ThemedText>
+          </View>
+          <View style={[styles.leagueDivider, { backgroundColor: theme.border }]} />
+          <View style={styles.league}>
+            <AppIcon name="football" color={theme.success} size={23} />
+            <ThemedText type="smallBold" themeColor="success">K리그 축구</ThemedText>
+          </View>
         </View>
 
         <View style={styles.signIn}>
@@ -102,7 +110,7 @@ export default function LoginScreen() {
               accessibilityRole={error ? 'alert' : undefined}
               accessibilityLiveRegion="polite"
               selectable={error !== null}
-              themeColor="textSecondary"
+              themeColor={error ? 'danger' : 'textSecondary'}
               type="small"
               style={styles.centeredText}>
               {error ?? '로그인 중이에요.'}
@@ -123,48 +131,19 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: 480,
-    gap: Spacing.five,
+    justifyContent: 'center',
+    gap: Spacing.four,
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.five,
   },
   intro: {
-    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.four,
+    gap: 12,
   },
-  mark: {
-    width: 76,
-    height: 76,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 24,
-    backgroundColor: '#2554DB',
-  },
-  pitch: {
-    width: 42,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderRadius: 5,
-    borderColor: '#FFFFFF',
-  },
-  halfwayLine: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 1.5,
-    backgroundColor: '#FFFFFF',
-  },
-  centerCircle: {
-    width: 12,
-    height: 12,
-    borderWidth: 1.5,
-    borderRadius: 6,
-    borderColor: '#FFFFFF',
-  },
+  leagues: { minHeight: 72, padding: 14, flexDirection: 'row', gap: 10 },
+  league: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  leagueDivider: { width: StyleSheet.hairlineWidth },
   centeredText: {
     textAlign: 'center',
   },
@@ -184,8 +163,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   buttonLabel: {
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 16,
+    lineHeight: 23,
     fontWeight: '700',
     textAlign: 'center',
   },

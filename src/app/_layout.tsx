@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 
 import { MockSessionProvider, useMockSession } from '@/features/auth/mock-session';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 
 function AppStack() {
   const { session } = useMockSession();
@@ -31,9 +32,21 @@ function AppStack() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const colors = useTheme();
+  const navigationTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={{
+      ...navigationTheme,
+      colors: {
+        ...navigationTheme.colors,
+        background: colors.background,
+        card: colors.surface,
+        border: colors.border,
+        primary: colors.accentText,
+        text: colors.text,
+      },
+    }}>
       <MockSessionProvider>
         <AppStack />
       </MockSessionProvider>

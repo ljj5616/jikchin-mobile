@@ -9,18 +9,34 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#102039',
+    background: '#F4F6FD',
+    backgroundElement: '#EAF0FE',
+    backgroundSelected: '#DCE6FA',
+    textSecondary: '#505B71',
+    surface: '#FFFFFF',
+    border: '#E1E7F4',
+    accent: '#1948D1',
+    accentText: '#1843BD',
+    success: '#00644D',
+    successSurface: '#D9F7EB',
+    danger: '#A82119',
+    dangerSurface: '#FCE7E6',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#EDF2FF',
+    background: '#0F1728',
+    backgroundElement: '#1E2C49',
+    backgroundSelected: '#2B3D61',
+    textSecondary: '#B0BDD7',
+    surface: '#172239',
+    border: '#2B3A55',
+    accent: '#2554DB',
+    accentText: '#A5BDFF',
+    success: '#86E9C8',
+    successSurface: '#173A36',
+    danger: '#FFB4AF',
+    dangerSurface: '#41262C',
   },
 } as const;
 
@@ -63,3 +79,12 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+export const Brand = {
+  blue: '#1948D1',
+  deepBlue: '#0737A8',
+  white: '#FFFFFF',
+  ice: '#D9E6FF',
+  mint: '#72F4C1',
+  red: '#A82119',
+} as const;

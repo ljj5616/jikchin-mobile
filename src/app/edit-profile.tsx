@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon, PageHeader, ui } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { AuthApiError, uploadAccountAvatar } from '@/features/auth/auth-api';
@@ -32,7 +33,7 @@ export default function EditProfileScreen() {
   const [favoriteKboTeamId, setFavoriteKboTeamId] = useState<number | null>(current?.profile.favoriteKboTeam?.id ?? null);
   const [favoriteKleagueTeamId, setFavoriteKleagueTeamId] = useState<number | null>(current?.profile.favoriteKleagueTeam?.id ?? null);
   const [expandedLeague, setExpandedLeague] = useState<League | null>(null);
-  const [nicknameFeedback, setNicknameFeedback] = useState<{ value: string; message: string } | null>(null);
+  const [nicknameFeedback, setNicknameFeedback] = useState<{ value: string; message: string; available?: boolean } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -40,7 +41,8 @@ export default function EditProfileScreen() {
   const uploadedAvatar = useRef<{ photo: ProfilePhotoSelection; key: string } | null>(null);
 
   const trimmedNickname = nickname.trim();
-  const inputColors = { color: theme.text, borderColor: theme.backgroundSelected };
+  const feedback = nicknameFeedback?.value === trimmedNickname ? nicknameFeedback : null;
+  const inputColors = { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement };
   const avatarUri = photo === undefined ? current?.profile.avatarUrl ?? null : photo?.uri ?? null;
 
   function goBack() {
@@ -59,6 +61,7 @@ export default function EditProfileScreen() {
       const { available } = await checkNickname(trimmedNickname);
       setNicknameFeedback({
         value: trimmedNickname,
+        available,
         message: available ? '사용할 수 있는 닉네임이에요.' : '이미 사용 중인 닉네임이에요.',
       });
     } catch (error) {
@@ -111,17 +114,17 @@ export default function EditProfileScreen() {
       <StatusBar style="auto" />
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-          <View style={styles.intro}>
-            <Pressable accessibilityRole="button" disabled={isSaving} onPress={goBack} style={styles.back}>
-              <ThemedText type="smallBold" themeColor="textSecondary">마이페이지로 돌아가기</ThemedText>
-            </Pressable>
-            <ThemedText accessibilityRole="header" type="subtitle" style={styles.title}>프로필 수정</ThemedText>
-            <ThemedText themeColor="textSecondary">나를 소개하고 응원팀을 선택해 주세요.</ThemedText>
-          </View>
+          <PageHeader title="프로필 수정" onBack={goBack} disabled={isSaving} />
 
-          <View style={styles.section}>
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <ProfilePhoto uri={avatarUri} onChange={setPhoto} disabled={isSaving} />
+          </View>
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.field}>
-              <ThemedText type="smallBold">닉네임 (필수)</ThemedText>
+              <View style={styles.fieldHeading}>
+                <ThemedText type="smallBold">닉네임 (필수)</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">{nickname.length}/{nicknameMaxLength}자</ThemedText>
+              </View>
               <View style={styles.nicknameRow}>
                 <TextInput
                   accessibilityLabel="닉네임"
@@ -136,25 +139,26 @@ export default function EditProfileScreen() {
                   }}
                   placeholder="닉네임을 입력해 주세요"
                   placeholderTextColor={theme.textSecondary}
-                  style={[styles.input, styles.nicknameInput, inputColors]}
+                  style={[styles.input, styles.nicknameInput, inputColors, feedback && { borderColor: feedback.available ? theme.success : theme.danger }]}
                 />
                 <Pressable
                   accessibilityRole="button"
                   disabled={isChecking || isSaving}
                   onPress={confirmNickname}
                   style={[styles.secondaryButton, { backgroundColor: theme.backgroundElement }]}>
-                  <ThemedText type="smallBold">{isChecking ? '확인 중' : '중복 확인'}</ThemedText>
+                  <ThemedText type="smallBold" themeColor="accentText">{isChecking ? '확인 중' : '중복 확인'}</ThemedText>
                 </Pressable>
               </View>
-              <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
-                {nicknameFeedback?.value === trimmedNickname
-                  ? nicknameFeedback.message
-                  : `${nickname.length}/${nicknameMaxLength}자`}
-              </ThemedText>
+              {feedback && (
+                <View style={[styles.feedback, { backgroundColor: feedback.available ? theme.successSurface : theme.dangerSurface }]}>
+                  <ThemedText type="small" themeColor={feedback.available ? 'success' : 'danger'} accessibilityLiveRegion="polite">
+                    {feedback.message}
+                  </ThemedText>
+                </View>
+              )}
             </View>
-
-            <ProfilePhoto uri={avatarUri} onChange={setPhoto} disabled={isSaving} />
-
+          </View>
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.field}>
               <ThemedText type="smallBold">한 줄 소개 (선택)</ThemedText>
               <TextInput
@@ -172,7 +176,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <View style={[styles.section, styles.teamSection, { borderColor: theme.backgroundSelected }]}>
+          <View style={[ui.card, styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.field}>
               <ThemedText accessibilityRole="header" style={styles.sectionTitle}>응원팀</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">리그마다 한 팀씩 선택할 수 있어요.</ThemedText>
@@ -206,13 +210,14 @@ export default function EditProfileScreen() {
           </View>
 
           <View style={styles.field}>
-            {saveError && <ThemedText type="small" accessibilityRole="alert">{saveError}</ThemedText>}
+            {saveError && <ThemedText type="small" accessibilityRole="alert" themeColor="danger">{saveError}</ThemedText>}
             <Pressable
               accessibilityRole="button"
               disabled={isSaving}
               onPress={submitProfile}
-              style={({ pressed }) => [styles.primaryButton, (pressed || isSaving) && styles.dimmed]}>
-              <ThemedText style={styles.primaryLabel}>{isSaving ? '저장 중' : '저장하기'}</ThemedText>
+              style={({ pressed }) => [ui.button, { backgroundColor: theme.accent }, (pressed || isSaving) && styles.dimmed]}>
+              <ThemedText style={[ui.buttonLabel, ui.white]}>{isSaving ? '저장 중' : '수정 완료'}</ThemedText>
+              {!isSaving && <AppIcon name="check" color="#FFFFFF" />}
             </Pressable>
           </View>
         </ScrollView>
@@ -227,15 +232,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: 480,
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: 18,
     paddingBottom: Spacing.five,
-    gap: Spacing.four,
+    gap: 16,
   },
-  intro: { gap: Spacing.two },
-  back: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  title: { fontWeight: '700' },
-  section: { gap: Spacing.four },
+  section: { gap: 16, padding: 15 },
   field: { gap: Spacing.two },
+  fieldHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 4 },
+  feedback: { borderRadius: 10, paddingVertical: 7, paddingHorizontal: 10 },
   nicknameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   nicknameInput: { flex: 1, minWidth: 0 },
   input: {
@@ -254,16 +258,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: 12,
   },
-  teamSection: { paddingTop: Spacing.four, borderTopWidth: StyleSheet.hairlineWidth },
   sectionTitle: { fontWeight: '700', fontSize: 20, lineHeight: 26 },
-  primaryButton: {
-    minHeight: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.two,
-    borderRadius: 12,
-    backgroundColor: '#2554DB',
-  },
-  primaryLabel: { color: '#FFFFFF', fontWeight: '700' },
   dimmed: { opacity: 0.8 },
 });

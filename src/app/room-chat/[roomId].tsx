@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Animated,
+  AppState,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -20,15 +21,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon, Badge } from '@/components/jikchin-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Spacing } from '@/constants/theme';
+import { AuthApiError, type AuthenticatedSession } from '@/features/auth/auth-api';
 import { useMockSession } from '@/features/auth/mock-session';
 import { MatchCard } from '@/features/rooms/match-card';
 import {
   chatBodyMaxLength,
-  getRoomChat,
   getRoomMessages,
+  mergeChatHistory,
+  mergeChatMessages,
   sendRoomMessage,
+  syncRoomChat,
   type ChatMessageResponse,
 } from '@/features/rooms/room-chat-api';
+import { subscribeToRoomChat } from '@/features/rooms/room-chat-socket';
 import { getRoomDetail, leaveRoom as leaveRoomRequest, type RoomParticipant } from '@/features/rooms/room-api';
 import { formatGameDate } from '@/features/rooms/room-list';
 import { useTheme } from '@/hooks/use-theme';
@@ -58,14 +63,18 @@ function MessageBubble({ message, own, onPressSender }: { message: ChatMessageRe
 }
 
 export default function RoomChatScreen() {
-  const theme = useTheme();
   const { roomId: roomParam } = useLocalSearchParams<{ roomId: string }>();
-  const roomId = Number(roomParam);
   const { session } = useMockSession();
-  const apiSession = session && !session.needProfile ? session.apiSession : null;
-  const userId = session && !session.needProfile ? session.userId : null;
-  const [chat, setChat] = useState<Awaited<ReturnType<typeof getRoomChat>> | null>(null);
+  if (!session || session.needProfile) return null;
+  const roomId = Number(roomParam);
+  return <RoomChat key={`${session.userId}:${roomId}`} roomId={roomId} userId={session.userId} apiSession={session.apiSession} />;
+}
+
+function RoomChat({ roomId, userId, apiSession }: { roomId: number; userId: number; apiSession: AuthenticatedSession }) {
+  const theme = useTheme();
+  const [chat, setChat] = useState<Awaited<ReturnType<typeof syncRoomChat>> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [liveStatus, setLiveStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'unavailable'>('connecting');
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -80,58 +89,122 @@ export default function RoomChatScreen() {
   const sending = useRef(false);
   const pendingMessage = useRef<{ body: string; id: string } | null>(null);
   const leaving = useRef(false);
-  const chatRequest = useRef(0);
-  const loadingOlder = useRef(false);
+  const chatRequest = useRef<AbortController | null>(null);
+  const olderRequest = useRef<AbortController | null>(null);
+  const lastSyncedId = useRef<number | null>(null);
+  const pendingMessages = useRef<ChatMessageResponse[]>([]);
+  const stopLive = useRef<(() => void) | undefined>(undefined);
   const participantsRequest = useRef(0);
   const [menuPosition] = useState(() => new Animated.Value(400));
 
+  const disconnectLive = useCallback(() => {
+    stopLive.current?.();
+    stopLive.current = undefined;
+  }, []);
+
   const loadChat = useCallback(async () => {
-    const request = ++chatRequest.current;
-    setChat(null);
+    chatRequest.current?.abort();
     setLoadError(null);
-    setHistoryError(null);
-    if (!apiSession || !Number.isSafeInteger(roomId) || roomId <= 0) {
+    if (!Number.isSafeInteger(roomId) || roomId <= 0) {
       setLoadError('방을 찾을 수 없어요.');
       return;
     }
+    const request = new AbortController();
+    chatRequest.current = request;
     try {
-      const result = await getRoomChat(apiSession, roomId);
-      if (chatRequest.current === request) setChat({ ...result, messages: result.messages.reverse() });
+      const result = await syncRoomChat(apiSession, roomId, lastSyncedId.current, request.signal);
+      if (request.signal.aborted) return;
+      lastSyncedId.current = result.latestId;
+      const buffered = pendingMessages.current;
+      pendingMessages.current = [];
+      setChat((current) => current
+        ? { ...result, ...mergeChatHistory(current, result) }
+        : { ...result, messages: mergeChatMessages(buffered, result.messages) });
     } catch (error) {
-      if (chatRequest.current === request) {
+      if (request.signal.aborted) return;
+      if (error instanceof AuthApiError && (error.status === 403 || error.status === 404)) {
+        disconnectLive();
+        olderRequest.current?.abort();
+        lastSyncedId.current = null;
+        pendingMessages.current = [];
         setChat(null);
-        setLoadError(error instanceof Error ? error.message : '채팅방을 불러오지 못했어요.');
       }
+      setLoadError(error instanceof Error ? error.message : '채팅방을 불러오지 못했어요.');
     }
-  }, [roomId, apiSession]);
+  }, [apiSession, disconnectLive, roomId]);
+
+  const receiveMessage = useCallback((message: ChatMessageResponse) => {
+    if (lastSyncedId.current === null) pendingMessages.current.push(message);
+    else setChat((current) => current ? { ...current, messages: mergeChatMessages(current.messages, [message]) } : current);
+  }, []);
+
+  const connectLive = useCallback(() => {
+    if (!Number.isSafeInteger(roomId) || roomId <= 0 || stopLive.current) return;
+    setLiveStatus('connecting');
+    stopLive.current = subscribeToRoomChat(apiSession, roomId, {
+      onConnected: () => {
+        setLiveStatus('connected');
+        void loadChat();
+      },
+      onDisconnected: () => setLiveStatus('reconnecting'),
+      onMessage: receiveMessage,
+      onAccessDenied: () => {
+        disconnectLive();
+        setLiveStatus('unavailable');
+        void loadChat();
+      },
+    });
+  }, [apiSession, disconnectLive, loadChat, receiveMessage, roomId]);
+
+  function retryChat() {
+    connectLive();
+    void loadChat();
+  }
 
   useFocusEffect(useCallback(() => {
+    lastSyncedId.current = null;
+    pendingMessages.current = [];
+    setChat(null);
+    setHistoryError(null);
     void loadChat();
-    return () => { chatRequest.current += 1; participantsRequest.current += 1; };
-  }, [loadChat]));
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') connectLive();
+      else disconnectLive();
+    });
+    if (AppState.currentState === 'active' || AppState.currentState == null) connectLive();
+    return () => {
+      subscription.remove();
+      disconnectLive();
+      chatRequest.current?.abort();
+      olderRequest.current?.abort();
+      olderRequest.current = null;
+      setIsLoadingOlder(false);
+      participantsRequest.current += 1;
+    };
+  }, [connectLive, disconnectLive, loadChat]));
 
   async function loadOlderMessages() {
-    if (!apiSession || !chat?.hasMore || chat.nextBeforeId === null || loadingOlder.current) return;
-    const request = chatRequest.current;
-    loadingOlder.current = true;
+    if (!chat?.hasMore || chat.nextBeforeId === null || olderRequest.current) return;
+    const request = new AbortController();
+    olderRequest.current = request;
     setIsLoadingOlder(true);
     setHistoryError(null);
     try {
-      const page = await getRoomMessages(apiSession, roomId, chat.nextBeforeId);
-      if (chatRequest.current === request) {
-        const older = page.messages.reverse();
-        setChat((current) => current ? { ...current, ...page, messages: [...current.messages, ...older] } : current);
+      const page = await getRoomMessages(apiSession, roomId, chat.nextBeforeId, request.signal);
+      if (!request.signal.aborted) {
+        setChat((current) => current ? { ...current, ...mergeChatHistory(current, page) } : current);
       }
     } catch (error) {
-      if (chatRequest.current === request) setHistoryError(error instanceof Error ? error.message : '이전 메시지를 불러오지 못했어요.');
+      if (!request.signal.aborted) setHistoryError(error instanceof Error ? error.message : '이전 메시지를 불러오지 못했어요.');
     } finally {
-      loadingOlder.current = false;
-      setIsLoadingOlder(false);
+      if (olderRequest.current === request) {
+        olderRequest.current = null;
+        setIsLoadingOlder(false);
+      }
     }
   }
 
   async function loadParticipants() {
-    if (!apiSession) return;
     const request = ++participantsRequest.current;
     setParticipants(null);
     setParticipantsError(null);
@@ -163,7 +236,7 @@ export default function RoomChatScreen() {
 
   async function sendMessage() {
     const text = body.trim();
-    if (!apiSession || !chat || !text || sending.current || leaving.current) return;
+    if (!chat || !text || sending.current || leaving.current) return;
     sending.current = true;
     setIsSending(true);
     setSendError(null);
@@ -172,10 +245,7 @@ export default function RoomChatScreen() {
       const draft = pendingMessage.current?.body === text ? pendingMessage.current : { body: text, id: uuid.v4() };
       pendingMessage.current = draft;
       const message = await sendRoomMessage(apiSession, roomId, draft.body, draft.id);
-      setChat((current) => {
-        if (!current || current.messages.some((item) => item.id === message.id)) return current;
-        return { ...current, messages: [message, ...current.messages].sort((a, b) => b.id - a.id) };
-      });
+      receiveMessage(message);
       pendingMessage.current = null;
       setBody('');
     } catch (error) {
@@ -197,14 +267,16 @@ export default function RoomChatScreen() {
   }
 
   async function leaveRoom() {
-    if (!apiSession || leaving.current || sending.current) return;
+    if (leaving.current || sending.current) return;
     leaving.current = true;
     setIsLeaving(true);
     setLeaveError(null);
 
     try {
       await leaveRoomRequest(apiSession, roomId);
-      chatRequest.current += 1;
+      disconnectLive();
+      chatRequest.current?.abort();
+      olderRequest.current?.abort();
       participantsRequest.current += 1;
       setShowLeaveDialog(false);
       setShowMenu(false);
@@ -219,6 +291,8 @@ export default function RoomChatScreen() {
   }
 
   const canSend = !isSending && !isLeaving && body.trim().length > 0;
+  const connectionNotice = liveStatus === 'reconnecting' ? '실시간 채팅에 다시 연결하는 중이에요.'
+    : liveStatus === 'unavailable' ? '실시간 채팅에 연결할 수 없어요.' : null;
   let leaveDescription = '다시 참여하면 그때부터 새 메시지를 볼 수 있어요.';
   if (chat?.room.participantCount === 1) {
     leaveDescription = '마지막 참여자가 나가면 이 방과 대화가 삭제돼요.';
@@ -272,6 +346,18 @@ export default function RoomChatScreen() {
 
         {chat ? (
           <>
+            {(connectionNotice || loadError) && (
+              <View style={styles.participantsMessage}>
+                <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+                  {loadError ?? connectionNotice}
+                </ThemedText>
+                {(loadError || liveStatus === 'unavailable') && (
+                  <Pressable accessibilityRole="button" onPress={retryChat} style={styles.retryButton}>
+                    <ThemedText type="smallBold">다시 시도</ThemedText>
+                  </Pressable>
+                )}
+              </View>
+            )}
             <FlatList
               data={chat.messages}
               inverted
@@ -325,7 +411,7 @@ export default function RoomChatScreen() {
               {loadError ?? '채팅방을 불러오는 중이에요.'}
             </ThemedText>
             {loadError && (
-              <Pressable accessibilityRole="button" onPress={loadChat} style={styles.retryButton}>
+              <Pressable accessibilityRole="button" onPress={retryChat} style={styles.retryButton}>
                 <ThemedText type="smallBold">다시 시도</ThemedText>
               </Pressable>
             )}

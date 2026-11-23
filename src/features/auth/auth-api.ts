@@ -1,3 +1,5 @@
+import { toByteArray } from 'base64-js';
+
 import type { CompleteProfileRequest, League, ProfilePhotoSelection, Team } from '@/features/onboarding/profile';
 
 export type SocialProvider = 'google' | 'kakao' | 'naver';
@@ -39,10 +41,14 @@ type RequestOptions = {
 
 type SessionRequestOptions = Omit<RequestOptions, 'token'>;
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export function getApiBaseUrl() {
   const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
   if (!baseUrl) throw new AuthApiError('API 주소가 설정되지 않았어요. EXPO_PUBLIC_API_URL을 확인해 주세요.');
+  return baseUrl;
+}
 
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const baseUrl = getApiBaseUrl();
   const { token, json, form, signal } = options;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -107,6 +113,18 @@ async function refreshAccountTokens(refreshToken: string): Promise<AuthTokens> {
   throw new AuthApiError('세션 갱신 응답에 로그인 정보가 없어요.');
 }
 
+function accessTokenExpiry(accessToken: string) {
+  try {
+    const payload = accessToken.split('.')[1];
+    const bytes = toByteArray(payload.padEnd(Math.ceil(payload.length / 4) * 4, '='));
+    const { exp } = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof exp === 'number' && Number.isFinite(exp)) return exp * 1000;
+  } catch {
+    // The claim is only used to schedule reconnection. The server authenticates the token.
+  }
+  throw new AuthApiError('로그인 정보의 만료 시간을 확인할 수 없어요.');
+}
+
 export class AuthenticatedSession {
   private refreshInFlight: Promise<void> | undefined;
   private ended = false;
@@ -126,9 +144,7 @@ export class AuthenticatedSession {
       if (!isUnauthorized(error) || options.signal?.aborted || this.ended) throw error;
 
       // Other requests may have already rotated the pair while this request was in flight.
-      if (sentTokens === this.tokens) this.refreshInFlight ??= this.rotateTokens();
-      if (this.refreshInFlight) await this.refreshInFlight;
-      this.ensureActive();
+      await this.refreshIfCurrent(sentTokens);
 
       const retryTokens = this.tokens;
       try {
@@ -140,6 +156,19 @@ export class AuthenticatedSession {
     }
     this.ensureActive();
     return result;
+  }
+
+  async getSocketCredentials(previousAccessToken?: string) {
+    this.ensureActive();
+    if (this.refreshInFlight) await this.refreshInFlight;
+    this.ensureActive();
+
+    const tokens = this.tokens;
+    if (tokens.accessToken === previousAccessToken || accessTokenExpiry(tokens.accessToken) <= Date.now()) {
+      await this.refreshIfCurrent(tokens);
+    }
+    const accessToken = this.tokens.accessToken;
+    return { accessToken, expiresAt: accessTokenExpiry(accessToken) };
   }
 
   end() {
@@ -157,6 +186,12 @@ export class AuthenticatedSession {
 
   private ensureActive() {
     if (this.ended) throw new AuthApiError('로그인 시간이 만료됐어요. 다시 로그인해 주세요.', 401);
+  }
+
+  private async refreshIfCurrent(tokens: AuthTokens) {
+    if (tokens === this.tokens) this.refreshInFlight ??= this.rotateTokens();
+    if (this.refreshInFlight) await this.refreshInFlight;
+    this.ensureActive();
   }
 
   private async rotateTokens() {

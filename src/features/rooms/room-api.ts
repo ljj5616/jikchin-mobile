@@ -30,8 +30,8 @@ export function createRoom(session: AuthenticatedSession, room: CreateRoomReques
   });
 }
 
-export function getRoom(session: AuthenticatedSession, roomId: number) {
-  return session.request<RoomResponse>(`${roomsPath}/${roomId}`, { errorMessages: roomErrors });
+export function getRoom(session: AuthenticatedSession, roomId: number, signal?: AbortSignal) {
+  return session.request<RoomResponse>(`${roomsPath}/${roomId}`, { errorMessages: roomErrors, signal });
 }
 
 export function listRoomParticipants(session: AuthenticatedSession, roomId: number) {
